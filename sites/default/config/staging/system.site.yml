@@ -1,0 +1,11 @@
+uuid: 71323add-3fef-40a0-8c08-8ad1730b581c
+name: 'Drupal Training Amsterdam'
+mail: site@example.com
+slogan: 'cache rebuild!'
+page:
+  403: ''
+  404: ''
+  front: node
+admin_compact_mode: false
+weight_select_max: 100
+langcode: en

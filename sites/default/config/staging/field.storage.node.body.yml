@@ -1,0 +1,17 @@
+uuid: 8e6cccd0-f481-4167-ac00-ac9d921a1653
+langcode: en
+status: true
+dependencies:
+  module:
+    - node
+    - text
+id: node.body
+name: body
+entity_type: node
+type: text_with_summary
+settings: {  }
+module: text
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }

@@ -1,0 +1,10 @@
+id: comment.full
+uuid: 38469862-5d24-40e6-b300-de6a32c2ef70
+label: 'Full comment'
+targetEntityType: comment
+status: false
+cache: true
+langcode: en
+dependencies:
+  module:
+    - comment
