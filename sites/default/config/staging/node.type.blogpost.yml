@@ -4,9 +4,9 @@ status: true
 dependencies:
   module:
     - menu_ui
-name: blogpost
+name: 'Blog post'
 type: blogpost
-description: ''
+description: 'Use this to post blogs!'
 help: ''
 new_revision: false
 preview_mode: 1
