@@ -4,9 +4,11 @@ status: true
 dependencies:
   entity:
     - field.instance.node.blogpost.body
+    - field.instance.node.blogpost.field_image
     - node.type.blogpost
   module:
     - entity_reference
+    - image
     - path
     - text
 id: node.blogpost.default
@@ -60,5 +62,12 @@ content:
       summary_rows: 3
       placeholder: ''
     third_party_settings: {  }
+  field_image:
+    weight: 32
+    settings:
+      progress_indicator: throbber
+      preview_image_style: thumbnail
+    third_party_settings: {  }
+    type: image_image
 hidden: {  }
 third_party_settings: {  }

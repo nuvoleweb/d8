@@ -30,3 +30,6 @@ sites/simpletest
 
 # Ignore SimpleTest multi-site environment.
 # simpletest
+#
+
+.htaccess
