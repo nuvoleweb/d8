@@ -7,7 +7,7 @@
 namespace Drupal\search\Tests;
 
 /**
- * Tests that the search prepocessing uses the correct language code.
+ * Tests that the search preprocessing uses the correct language code.
  *
  * @group search
  */
@@ -19,6 +19,13 @@ class SearchPreprocessLangcodeTest extends SearchTestBase {
    * @var array
    */
   public static $modules = array('search_langcode_test');
+
+  /**
+   * Test node for searching.
+   *
+   * @var \Drupal\node\NodeInterface
+   */
+  protected $node;
 
   protected function setUp() {
     parent::setUp();

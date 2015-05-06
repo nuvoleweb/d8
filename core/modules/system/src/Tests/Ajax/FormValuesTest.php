@@ -18,8 +18,7 @@ class FormValuesTest extends AjaxTestBase {
   protected function setUp() {
     parent::setUp();
 
-    $this->web_user = $this->drupalCreateUser(array('access content'));
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->drupalCreateUser(array('access content')));
   }
 
   /**
@@ -59,6 +58,6 @@ class FormValuesTest extends AjaxTestBase {
     }
     // The exceptions are expected. Do not interpret them as a test failure.
     // Not using File API; a potential error must trigger a PHP warning.
-    unlink(DRUPAL_ROOT . '/' . $this->siteDirectory . '/error.log');
+    unlink(\Drupal::root() . '/' . $this->siteDirectory . '/error.log');
   }
 }

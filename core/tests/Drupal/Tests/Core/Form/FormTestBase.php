@@ -10,6 +10,7 @@ namespace Drupal\Tests\Core\Form {
 use Drupal\Component\Utility\Html;
 use Drupal\Core\Form\FormBuilder;
 use Drupal\Core\Form\FormInterface;
+use Drupal\Core\Form\FormState;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\Tests\UnitTestCase;
@@ -63,6 +64,13 @@ abstract class FormTestBase extends UnitTestCase {
   protected $formCache;
 
   /**
+   * The cache backend to use.
+   *
+   * @var \Drupal\Core\Cache\CacheBackendInterface|\PHPUnit_Framework_MockObject_MockObject
+   */
+  protected $cache;
+
+  /**
    * The current user.
    *
    * @var \Drupal\Core\Session\AccountInterface|\PHPUnit_Framework_MockObject_MockObject
@@ -105,6 +113,14 @@ abstract class FormTestBase extends UnitTestCase {
   protected $classResolver;
 
   /**
+   * The element info manager.
+   *
+   * @var \Drupal\Core\Render\ElementInfoManagerInterface
+   */
+  protected $elementInfo;
+
+  /**
+   *
    * The event dispatcher.
    *
    * @var \Symfony\Component\EventDispatcher\EventDispatcherInterface|\PHPUnit_Framework_MockObject_MockObject
@@ -117,9 +133,9 @@ abstract class FormTestBase extends UnitTestCase {
   protected $translationManager;
 
   /**
-   * @var \Symfony\Component\HttpKernel\HttpKernel|\PHPUnit_Framework_MockObject_MockObject
+   * @var \Drupal\Core\DrupalKernelInterface|\PHPUnit_Framework_MockObject_MockObject
    */
-  protected $httpKernel;
+  protected $kernel;
 
   /**
    * @var \PHPUnit_Framework_MockObject_MockObject|\Psr\Log\LoggerInterface
@@ -137,12 +153,22 @@ abstract class FormTestBase extends UnitTestCase {
     $this->moduleHandler = $this->getMock('Drupal\Core\Extension\ModuleHandlerInterface');
 
     $this->formCache = $this->getMock('Drupal\Core\Form\FormCacheInterface');
+    $this->cache = $this->getMock('Drupal\Core\Cache\CacheBackendInterface');
     $this->urlGenerator = $this->getMock('Drupal\Core\Routing\UrlGeneratorInterface');
+
     $this->classResolver = $this->getClassResolverStub();
+
+    $this->elementInfo = $this->getMockBuilder('\Drupal\Core\Render\ElementInfoManagerInterface')
+      ->disableOriginalConstructor()
+      ->getMock();
+    $this->elementInfo->expects($this->any())
+      ->method('getInfo')
+      ->will($this->returnCallback(array($this, 'getInfo')));
+
     $this->csrfToken = $this->getMockBuilder('Drupal\Core\Access\CsrfTokenGenerator')
       ->disableOriginalConstructor()
       ->getMock();
-    $this->httpKernel = $this->getMockBuilder('Symfony\Component\HttpKernel\HttpKernel')
+    $this->kernel = $this->getMockBuilder('\Drupal\Core\DrupalKernel')
       ->disableOriginalConstructor()
       ->getMock();
     $this->account = $this->getMock('Drupal\Core\Session\AccountInterface');
@@ -160,9 +186,9 @@ abstract class FormTestBase extends UnitTestCase {
       ->setConstructorArgs(array($this->requestStack, $this->urlGenerator))
       ->setMethods(array('batchGet', 'drupalInstallationAttempted'))
       ->getMock();
+    $this->root = dirname(dirname(substr(__DIR__, 0, -strlen(__NAMESPACE__))));
 
-    $this->formBuilder = new TestFormBuilder($this->formValidator, $this->formSubmitter, $this->formCache, $this->moduleHandler, $this->eventDispatcher, $this->requestStack, $this->classResolver, $this->themeManager, $this->csrfToken, $this->httpKernel);
-    $this->formBuilder->setCurrentUser($this->account);
+    $this->formBuilder = new FormBuilder($this->formValidator, $this->formSubmitter, $this->formCache, $this->moduleHandler, $this->eventDispatcher, $this->requestStack, $this->classResolver, $this->elementInfo, $this->themeManager, $this->csrfToken, $this->kernel);
   }
 
   /**
@@ -170,6 +196,7 @@ abstract class FormTestBase extends UnitTestCase {
    */
   protected function tearDown() {
     Html::resetSeenIds();
+    (new FormState())->clearErrors();
   }
 
   /**
@@ -249,34 +276,20 @@ abstract class FormTestBase extends UnitTestCase {
     $this->assertSame(array_intersect_key($expected_element, $actual_element), $expected_element);
   }
 
-}
-
-/**
- * Provides a test form builder class.
- */
-class TestFormBuilder extends FormBuilder {
-  protected static $seenIds = array();
-
   /**
-   * {@inheritdoc}
+   * A stub method returning properties for the defined element type.
+   *
+   * @param string $type
+   *   The machine name of an element type plugin.
+   *
+   * @return array
+   *   An array with dummy values to be used in tests. Defaults to an empty
+   *   array.
    */
-  protected function sendResponse(Response $response) {
-    parent::sendResponse($response);
-    // Throw an exception instead of exiting.
-    throw new \Exception('exit');
-  }
-
-  /**
-   * @param \Drupal\Core\Session\AccountInterface $account
-   */
-  public function setCurrentUser(AccountInterface $account) {
-    $this->currentUser = $account;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  protected function getElementInfo($type) {
+  public function getInfo($type) {
+    $types['hidden'] = [
+      '#input' => TRUE,
+    ];
     $types['token'] = array(
       '#input' => TRUE,
     );
@@ -298,33 +311,6 @@ class TestFormBuilder extends FormBuilder {
       $types[$type] = array();
     }
     return $types[$type];
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  protected function drupalHtmlClass($class) {
-    return $class;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  protected function drupalHtmlId($id) {
-    if (isset(static::$seenIds[$id])) {
-      $id = $id . '--' . ++static::$seenIds[$id];
-    }
-    else {
-      static::$seenIds[$id] = 1;
-    }
-    return $id;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function drupalStaticReset($name = NULL) {
-    static::$seenIds = array();
   }
 
 }

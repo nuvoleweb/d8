@@ -40,7 +40,8 @@ class DisplayTest extends DisplayPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::defineOptions().
+   * Overrides
+   * Drupal\views\Plugin\views\display\DisplayPluginBase::defineOptions().
    */
   protected function defineOptions() {
     $options = parent::defineOptions();
@@ -50,41 +51,41 @@ class DisplayTest extends DisplayPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::optionsSummaryv().
+   * {@inheritdoc}
    */
   public function optionsSummary(&$categories, &$options) {
     parent::optionsSummary($categories, $options);
 
     $categories['display_test'] = array(
-      'title' => t('Display test settings'),
+      'title' => $this->t('Display test settings'),
       'column' => 'second',
       'build' => array(
         '#weight' => -100,
       ),
     );
 
-    $test_option = $this->getOption('test_option') ?: t('Empty');
+    $test_option = $this->getOption('test_option') ?: $this->t('Empty');
 
     $options['test_option'] = array(
       'category' => 'display_test',
-      'title' => t('Test option'),
+      'title' => $this->t('Test option'),
       'value' => views_ui_truncate($test_option, 24),
     );
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::buildOptionsForm().
+   * {@inheritdoc}
    */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     parent::buildOptionsForm($form, $form_state);
 
     switch ($form_state->get('section')) {
       case 'test_option':
-        $form['#title'] .= t('Test option');
+        $form['#title'] .= $this->t('Test option');
         $form['test_option'] = array(
-          '#title' => t('Test option'),
+          '#title' => $this->t('Test option'),
           '#type' => 'textfield',
-          '#description' => t('This is a textfield for test_option.'),
+          '#description' => $this->t('This is a textfield for test_option.'),
           '#default_value' => $this->getOption('test_option'),
         );
         break;
@@ -92,7 +93,7 @@ class DisplayTest extends DisplayPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::validateOptionsForm().
+   * {@inheritdoc}
    */
   public function validateOptionsForm(&$form, FormStateInterface $form_state) {
     parent::validateOptionsForm($form, $form_state);
@@ -100,14 +101,14 @@ class DisplayTest extends DisplayPluginBase {
     switch ($form_state->get('section')) {
       case 'test_option':
         if (!trim($form_state->getValue('test_option'))) {
-          $form_state->setError($form['test_option'], t('You cannot have an empty option.'));
+          $form_state->setError($form['test_option'], $this->t('You cannot have an empty option.'));
         }
         break;
     }
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::submitOptionsForm().
+   * {@inheritdoc}
    */
   public function submitOptionsForm(&$form, FormStateInterface $form_state) {
     parent::submitOptionsForm($form, $form_state);
@@ -119,7 +120,7 @@ class DisplayTest extends DisplayPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::execute().
+   * {@inheritdoc}
    */
   public function execute() {
     $this->view->build();
@@ -132,12 +133,30 @@ class DisplayTest extends DisplayPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::preview().
-   *
-   * Override so preview and execute are the same output.
+   * {@inheritdoc}
    */
   public function preview() {
     return $this->execute();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    return parent::calculateDependencies() + [
+      'content' => ['DisplayTest'],
+    ];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function validate() {
+    $errors = parent::validate();
+    foreach ($this->view->displayHandlers as $display_handler) {
+      $errors[] = 'error';
+    }
+    return $errors;
   }
 
 }

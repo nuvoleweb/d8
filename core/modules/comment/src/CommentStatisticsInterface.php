@@ -6,7 +6,7 @@
 
 namespace Drupal\comment;
 
-use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Entity\EntityInterface;
 
 /**
@@ -32,7 +32,7 @@ interface CommentStatisticsInterface {
    *   Array of entities on which commenting is enabled, keyed by id
    * @param string $entity_type
    *   The entity type of the passed entities.
-   * @param boolean $accurate
+   * @param bool $accurate
    *   (optional) Indicates if results must be completely up to date. If set to
    *   FALSE, a replica database will used if available. Defaults to TRUE.
    *
@@ -75,11 +75,11 @@ interface CommentStatisticsInterface {
   /**
    * Insert an empty record for the given entity.
    *
-   * @param \Drupal\Core\Entity\ContentEntityInterface $entity
+   * @param \Drupal\Core\Entity\FieldableEntityInterface $entity
    *   The created entity for which a statistics record is to be initialized.
    * @param array $fields
    *   Array of comment field definitions for the given entity.
    */
-  public function create(ContentEntityInterface $entity, $fields);
+  public function create(FieldableEntityInterface $entity, $fields);
 
 }

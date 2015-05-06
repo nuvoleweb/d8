@@ -7,9 +7,8 @@
 
 namespace Drupal\Core\Utility;
 
-use Drupal\Component\Utility\String;
-use Drupal\Component\Utility\Xss;
 use Drupal\Component\Utility\SafeMarkup;
+use Drupal\Component\Utility\Xss;
 use Drupal\Core\Database\DatabaseExceptionWrapper;
 
 /**
@@ -34,13 +33,13 @@ class Error {
   /**
    * Decodes an exception and retrieves the correct caller.
    *
-   * @param \Exception $exception
+   * @param \Exception|\BaseException $exception
    *   The exception object that was thrown.
    *
    * @return array
    *   An error in the format expected by _drupal_log_error().
    */
-  public static function decodeException(\Exception $exception) {
+  public static function decodeException($exception) {
     $message = $exception->getMessage();
 
     $backtrace = $exception->getTrace();
@@ -71,7 +70,7 @@ class Error {
       '%type' => get_class($exception),
       // The standard PHP exception handler considers that the exception message
       // is plain-text. We mimic this behavior here.
-      '!message' => String::checkPlain($message),
+      '!message' => SafeMarkup::checkPlain($message),
       '%function' => $caller['function'],
       '%file' => $caller['file'],
       '%line' => $caller['line'],
@@ -83,20 +82,20 @@ class Error {
   /**
    * Renders an exception error message without further exceptions.
    *
-   * @param \Exception $exception
+   * @param \Exception|\BaseException $exception
    *   The exception object that was thrown.
    *
    * @return string
    *   An error message.
    */
-  public static function renderExceptionSafe(\Exception $exception) {
+  public static function renderExceptionSafe($exception) {
     $decode = static::decodeException($exception);
     $backtrace = $decode['backtrace'];
     unset($decode['backtrace']);
     // Remove 'main()'.
     array_shift($backtrace);
 
-    $output = String::format('%type: !message in %function (line %line of %file).', $decode);
+    $output = SafeMarkup::format('%type: !message in %function (line %line of %file).', $decode);
     // Even though it is possible that this method is called on a public-facing
     // site, it is only called when the exception handler itself threw an
     // exception, which normally means that a code change caused the system to
@@ -177,58 +176,6 @@ class Error {
           }
           else {
             $call['args'][] = ucfirst(gettype($arg));
-          }
-        }
-      }
-
-      $return .= $call['function'] . '(' . implode(', ', $call['args']) . ")\n";
-    }
-
-    return $return;
-  }
-
-  /**
-   * Formats a flattened backtrace into a plain-text string.
-   *
-   * The calls show values for scalar arguments and type names for complex ones.
-   *
-   * @param array $backtrace
-   *   The backtrace of a Symfony\Component\Debug\Exception\FlattenException.
-   *
-   * @return string
-   *   A plain-text line-wrapped string ready to be put inside <pre>.
-   */
-  public static function formatFlattenedBacktrace(array $backtrace) {
-    $return = '';
-
-    foreach ($backtrace as $trace) {
-      $call = array('function' => '', 'args' => array());
-
-      if (isset($trace['class'])) {
-        $call['function'] = $trace['class'] . $trace['type'] . $trace['function'];
-      }
-      elseif (isset($trace['function'])) {
-        $call['function'] = $trace['function'];
-      }
-      else {
-        $call['function'] = 'main';
-      }
-
-      if (isset($trace['args'])) {
-        foreach ($trace['args'] as $arg) {
-          $type = $arg[0];
-          $value = $arg[1];
-          if ($type == 'array') {
-            $call['args'][] = '[' . ucfirst($type) . ']';
-          }
-          elseif ($type == 'null') {
-            $call['args'][] = strtoupper($type);
-          }
-          elseif ($type == 'boolean') {
-            $call['args'][] = $value ? 'TRUE' : 'FALSE';
-          }
-          else {
-            $call['args'][] = $value;
           }
         }
       }

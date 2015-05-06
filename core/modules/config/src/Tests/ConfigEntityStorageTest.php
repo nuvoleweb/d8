@@ -7,7 +7,7 @@
 
 namespace Drupal\config\Tests;
 
-use Drupal\simpletest\DrupalUnitTestBase;
+use Drupal\simpletest\KernelTestBase;
 use Drupal\Core\Config\ConfigDuplicateUUIDException;
 
 /**
@@ -16,7 +16,7 @@ use Drupal\Core\Config\ConfigDuplicateUUIDException;
  *
  * @group config
  */
-class ConfigEntityStorageTest extends DrupalUnitTestBase {
+class ConfigEntityStorageTest extends KernelTestBase {
 
   /**
    * Modules to enable.
@@ -26,12 +26,12 @@ class ConfigEntityStorageTest extends DrupalUnitTestBase {
   public static $modules = array('config_test');
 
   /**
-   * Tests importing fields and instances with changed IDs or UUIDs.
+   * Tests creating configuration entities with changed UUIDs.
    */
   public function testUUIDConflict() {
     $entity_type = 'config_test';
     $id = 'test_1';
-    // Load the original field and instance entities.
+    // Load the original configuration entity.
     entity_create($entity_type, array('id' => $id))->save();
     $entity = entity_load($entity_type, $id);
 

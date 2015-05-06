@@ -7,14 +7,18 @@
 
 namespace Drupal\dblog\Controller;
 
+use Drupal\Component\Utility\Html;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Component\Utility\Unicode;
-use Drupal\Component\Utility\String;
 use Drupal\Component\Utility\Xss;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Datetime\DateFormatter;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Form\FormBuilderInterface;
+use Drupal\Core\Logger\RfcLogLevel;
+use Drupal\Core\Url;
+use Drupal\user\Entity\User;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -51,6 +55,13 @@ class DbLogController extends ControllerBase {
   protected $formBuilder;
 
   /**
+   * The user storage.
+   *
+   * @var \Drupal\user\UserStorageInterface
+   */
+  protected $userStorage;
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
@@ -79,6 +90,7 @@ class DbLogController extends ControllerBase {
     $this->moduleHandler = $module_handler;
     $this->dateFormatter = $date_formatter;
     $this->formBuilder = $form_builder;
+    $this->userStorage = $this->entityManager()->getStorage('user');
   }
 
   /**
@@ -89,14 +101,14 @@ class DbLogController extends ControllerBase {
    */
   public static function getLogLevelClassMap() {
     return array(
-      WATCHDOG_DEBUG => 'dblog-debug',
-      WATCHDOG_INFO => 'dblog-info',
-      WATCHDOG_NOTICE => 'dblog-notice',
-      WATCHDOG_WARNING => 'dblog-warning',
-      WATCHDOG_ERROR => 'dblog-error',
-      WATCHDOG_CRITICAL => 'dblog-critical',
-      WATCHDOG_ALERT => 'dblog-alert',
-      WATCHDOG_EMERGENCY => 'dblog-emergency',
+      RfcLogLevel::DEBUG => 'dblog-debug',
+      RfcLogLevel::INFO => 'dblog-info',
+      RfcLogLevel::NOTICE => 'dblog-notice',
+      RfcLogLevel::WARNING => 'dblog-warning',
+      RfcLogLevel::ERROR => 'dblog-error',
+      RfcLogLevel::CRITICAL => 'dblog-critical',
+      RfcLogLevel::ALERT => 'dblog-alert',
+      RfcLogLevel::EMERGENCY => 'dblog-emergency',
     );
   }
 
@@ -139,7 +151,7 @@ class DbLogController extends ControllerBase {
       $this->t('Message'),
       array(
         'data' => $this->t('User'),
-        'field' => 'u.name',
+        'field' => 'ufd.name',
         'class' => array(RESPONSIVE_PRIORITY_MEDIUM)),
       array(
         'data' => $this->t('Operations'),
@@ -159,6 +171,7 @@ class DbLogController extends ControllerBase {
       'variables',
       'link',
     ));
+    $query->leftJoin('users_field_data', 'ufd', 'w.uid = ufd.uid');
 
     if (!empty($filter['where'])) {
       $query->where($filter['where'], $filter['args']);
@@ -172,18 +185,19 @@ class DbLogController extends ControllerBase {
       $message = $this->formatMessage($dblog);
       if ($message && isset($dblog->wid)) {
         // Truncate link_text to 56 chars of message.
-        $log_text = Unicode::truncate(Xss::filter($message, array()), 56, TRUE, TRUE);
-        $message = $this->l($log_text, 'dblog.event',  array('event_id' => $dblog->wid), array(
+        // @todo Reevaluate the SafeMarkup::set() in
+        //   https://www.drupal.org/node/2399261.
+        $log_text = SafeMarkup::set(Unicode::truncate(Xss::filter($message, array()), 56, TRUE, TRUE));
+        $message = $this->l($log_text, new Url('dblog.event', array('event_id' => $dblog->wid), array(
           'attributes' => array(
             // Provide a title for the link for useful hover hints.
             'title' => Unicode::truncate(strip_tags($message), 256, TRUE, TRUE),
           ),
-          'html' => TRUE,
-        ));
+        )));
       }
       $username = array(
         '#theme' => 'username',
-        '#account' => user_load($dblog->uid),
+        '#account' => $this->userStorage->load($dblog->uid),
       );
       $rows[] = array(
         'data' => array(
@@ -196,7 +210,7 @@ class DbLogController extends ControllerBase {
           Xss::filter($dblog->link),
         ),
         // Attributes for table row.
-        'class' => array(drupal_html_class('dblog-' . $dblog->type), $classes[$dblog->severity]),
+        'class' => array(Html::getClass('dblog-' . $dblog->type), $classes[$dblog->severity]),
       );
     }
 
@@ -210,7 +224,7 @@ class DbLogController extends ControllerBase {
         'library' => array('dblog/drupal.dblog'),
       ),
     );
-    $build['dblog_pager'] = array('#theme' => 'pager');
+    $build['dblog_pager'] = array('#type' => 'pager');
 
     return $build;
 
@@ -229,12 +243,12 @@ class DbLogController extends ControllerBase {
    */
   public function eventDetails($event_id) {
     $build = array();
-    if ($dblog = $this->database->query('SELECT w.*, u.name, u.uid FROM {watchdog} w INNER JOIN {users_field_data} u ON w.uid = u.uid WHERE w.wid = :id AND u.default_langcode = 1', array(':id' => $event_id))->fetchObject()) {
-      $severity = watchdog_severity_levels();
+    if ($dblog = $this->database->query('SELECT w.*, u.uid FROM {watchdog} w LEFT JOIN {users} u ON u.uid = w.uid WHERE w.wid = :id', array(':id' => $event_id))->fetchObject()) {
+      $severity = RfcLogLevel::getLevels();
       $message = $this->formatMessage($dblog);
       $username = array(
         '#theme' => 'username',
-        '#account' => user_load($dblog->uid),
+        '#account' => $dblog->uid ? $this->userStorage->load($dblog->uid) : User::getAnonymousUser(),
       );
       $rows = array(
         array(
@@ -251,11 +265,11 @@ class DbLogController extends ControllerBase {
         ),
         array(
           array('data' => $this->t('Location'), 'header' => TRUE),
-          l($dblog->location, $dblog->location),
+          $this->l($dblog->location, $dblog->location ? Url::fromUri($dblog->location) : Url::fromRoute('<none>')),
         ),
         array(
           array('data' => $this->t('Referrer'), 'header' => TRUE),
-          l($dblog->referer, $dblog->referer),
+          $this->l($dblog->referer, $dblog->referer ? Url::fromUri($dblog->referer) : Url::fromRoute('<none>')),
         ),
         array(
           array('data' => $this->t('Message'), 'header' => TRUE),
@@ -267,11 +281,11 @@ class DbLogController extends ControllerBase {
         ),
         array(
           array('data' => $this->t('Hostname'), 'header' => TRUE),
-          String::checkPlain($dblog->hostname),
+          SafeMarkup::checkPlain($dblog->hostname),
         ),
         array(
           array('data' => $this->t('Operations'), 'header' => TRUE),
-          $dblog->link,
+          SafeMarkup::checkAdminXss($dblog->link),
         ),
       );
       $build['dblog_table'] = array(
@@ -325,7 +339,7 @@ class DbLogController extends ControllerBase {
   /**
    * Formats a database log message.
    *
-   * @param stdClass $row
+   * @param object $row
    *   The record from the watchdog table. The object properties are: wid, uid,
    *   severity, type, timestamp, message, variables, link, name.
    *
@@ -405,7 +419,7 @@ class DbLogController extends ControllerBase {
         'library' => array('dblog/drupal.dblog'),
       ),
     );
-    $build['dblog_top_pager'] = array('#theme' => 'pager');
+    $build['dblog_top_pager'] = array('#type' => 'pager');
 
     return $build;
   }

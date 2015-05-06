@@ -7,9 +7,9 @@
 
 namespace Drupal\user\Plugin\views\argument;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Entity\EntityStorageInterface;
-use Drupal\views\Plugin\views\argument\Numeric;
+use Drupal\views\Plugin\views\argument\NumericArgument;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -19,7 +19,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  *
  * @ViewsArgument("user_uid")
  */
-class Uid extends Numeric {
+class Uid extends NumericArgument {
 
   /**
    * The user storage.
@@ -61,7 +61,7 @@ class Uid extends Numeric {
    */
   public function titleQuery() {
     return array_map(function($account) {
-      return String::checkPlain($account->label());
+      return SafeMarkup::checkPlain($account->label());
     }, $this->storage->loadMultiple($this->value));
   }
 

@@ -10,6 +10,7 @@ namespace Drupal\system\Tests\Module;
 use Drupal\Core\Config\InstallStorage;
 use Drupal\Core\Database\Database;
 use Drupal\Core\Config\FileStorage;
+use Drupal\Core\Logger\RfcLogLevel;
 use Drupal\simpletest\WebTestBase;
 
 /**
@@ -24,13 +25,13 @@ abstract class ModuleTestBase extends WebTestBase {
    */
   public static $modules = array('system_test');
 
-  protected $admin_user;
+  protected $adminUser;
 
   protected function setUp() {
     parent::setUp();
 
-    $this->admin_user = $this->drupalCreateUser(array('access administration pages', 'administer modules'));
-    $this->drupalLogin($this->admin_user);
+    $this->adminUser = $this->drupalCreateUser(array('access administration pages', 'administer modules'));
+    $this->drupalLogin($this->adminUser);
   }
 
   /**
@@ -58,7 +59,6 @@ abstract class ModuleTestBase extends WebTestBase {
    *   The name of the module.
    */
   function assertModuleTablesExist($module) {
-    $this->rebuildContainer();
     $tables = array_keys(drupal_get_schema_unprocessed($module));
     $tables_exist = TRUE;
     foreach ($tables as $table) {
@@ -119,7 +119,7 @@ abstract class ModuleTestBase extends WebTestBase {
     // list all default config once more, but filtered by $module.
     $names = $module_file_storage->listAll($module . '.');
     foreach ($names as $key => $name) {
-      if (\Drupal::config($name)->get()) {
+      if ($this->config($name)->get()) {
         unset($names[$key]);
       }
     }
@@ -165,7 +165,6 @@ abstract class ModuleTestBase extends WebTestBase {
 
   /**
    * Verify a log entry was entered for a module's status change.
-   * Called in the same way of the expected original watchdog() execution.
    *
    * @param $type
    *   The category to which this message belongs.
@@ -184,7 +183,7 @@ abstract class ModuleTestBase extends WebTestBase {
    * @param $link
    *   A link to associate with the message.
    */
-  function assertLogMessage($type, $message, $variables = array(), $severity = WATCHDOG_NOTICE, $link = '') {
+  function assertLogMessage($type, $message, $variables = array(), $severity = RfcLogLevel::NOTICE, $link = '') {
     $count = db_select('watchdog', 'w')
       ->condition('type', $type)
       ->condition('message', $message)

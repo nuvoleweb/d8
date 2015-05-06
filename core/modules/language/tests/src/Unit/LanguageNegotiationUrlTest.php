@@ -27,13 +27,17 @@ class LanguageNegotiationUrlTest extends UnitTestCase {
   protected function setUp() {
 
     // Set up some languages to be used by the language-based path processor.
+    $language_de = $this->getMock('\Drupal\Core\Language\LanguageInterface');
+    $language_de->expects($this->any())
+      ->method('getId')
+      ->will($this->returnValue('de'));
+    $language_en = $this->getMock('\Drupal\Core\Language\LanguageInterface');
+    $language_en->expects($this->any())
+      ->method('getId')
+      ->will($this->returnValue('en'));
     $languages = array(
-      'de' => (object) array(
-        'id' => 'de',
-      ),
-      'en' => (object) array(
-        'id' => 'en',
-      ),
+      'de' => $language_de,
+      'en' => $language_en,
     );
 
     // Create a language manager stub.
@@ -89,7 +93,7 @@ class LanguageNegotiationUrlTest extends UnitTestCase {
    * Provides data for the domain test.
    *
    * @return array
-   *   An array of data for checking domain negotation.
+   *   An array of data for checking domain negotiation.
    */
   public function providerTestDomain() {
 

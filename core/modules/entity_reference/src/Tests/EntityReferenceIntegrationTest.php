@@ -7,6 +7,11 @@
 
 namespace Drupal\entity_reference\Tests;
 
+use Drupal\Component\Utility\SafeMarkup;
+use Drupal\config\Tests\AssertConfigEntityImportTrait;
+use Drupal\Core\Config\Entity\ConfigEntityBase;
+use Drupal\entity_reference\Tests\EntityReferenceTestTrait;
+use Drupal\field\Entity\FieldConfig;
 use Drupal\simpletest\WebTestBase;
 
 /**
@@ -15,6 +20,9 @@ use Drupal\simpletest\WebTestBase;
  * @group entity_reference
  */
 class EntityReferenceIntegrationTest extends WebTestBase {
+
+  use AssertConfigEntityImportTrait;
+  use EntityReferenceTestTrait;
 
   /**
    * The entity type used in this test.
@@ -42,7 +50,7 @@ class EntityReferenceIntegrationTest extends WebTestBase {
    *
    * @var array
    */
-  public static $modules = array('config_test', 'entity_test', 'entity_reference', 'options');
+  public static $modules = array('config_test', 'entity_test', 'entity_reference', 'field_ui');
 
   /**
    * {@inheritdoc}
@@ -51,7 +59,7 @@ class EntityReferenceIntegrationTest extends WebTestBase {
     parent::setUp();
 
     // Create a test user.
-    $web_user = $this->drupalCreateUser(array('administer entity_test content'));
+    $web_user = $this->drupalCreateUser(array('administer entity_test content', 'administer entity_test fields', 'view test entity'));
     $this->drupalLogin($web_user);
   }
 
@@ -59,25 +67,18 @@ class EntityReferenceIntegrationTest extends WebTestBase {
    * Tests the entity reference field with all its supported field widgets.
    */
   public function testSupportedEntityTypesAndWidgets() {
-    $user_id = mt_rand(128, 256);
-    foreach ($this->getTestEntities() as $referenced_entities) {
+    foreach ($this->getTestEntities() as $key => $referenced_entities) {
       $this->fieldName = 'field_test_' . $referenced_entities[0]->getEntityTypeId();
 
       // Create an Entity reference field.
-      entity_reference_create_instance($this->entityType, $this->bundle, $this->fieldName, $this->fieldName, $referenced_entities[0]->getEntityTypeId(), 'default', array(), 2);
+      $this->createEntityReferenceField($this->entityType, $this->bundle, $this->fieldName, $this->fieldName, $referenced_entities[0]->getEntityTypeId(), 'default', array(), 2);
 
       // Test the default 'entity_reference_autocomplete' widget.
       entity_get_form_display($this->entityType, $this->bundle, 'default')->setComponent($this->fieldName)->save();
 
-      $user_id++;
-      entity_create('user', array(
-        'uid' => $user_id,
-        'name' => $this->randomString(),
-      ))->save();
       $entity_name = $this->randomMachineName();
       $edit = array(
-        'name' => $entity_name,
-        'user_id' => $user_id,
+        'name[0][value]' => $entity_name,
         $this->fieldName . '[0][target_id]' => $referenced_entities[0]->label() . ' (' . $referenced_entities[0]->id() . ')',
         // Test an input of the entity label without a ' (entity_id)' suffix.
         $this->fieldName . '[1][target_id]' => $referenced_entities[1]->label(),
@@ -88,7 +89,11 @@ class EntityReferenceIntegrationTest extends WebTestBase {
       // Try to post the form again with no modification and check if the field
       // values remain the same.
       $entity = current(entity_load_multiple_by_properties($this->entityType, array('name' => $entity_name)));
-      $this->drupalPostForm($this->entityType . '/manage/' . $entity->id(), array(), t('Save'));
+      $this->drupalGet($this->entityType . '/manage/' . $entity->id());
+      $this->assertFieldByName($this->fieldName . '[0][target_id]', $referenced_entities[0]->label() . ' (' . $referenced_entities[0]->id() . ')');
+      $this->assertFieldByName($this->fieldName . '[1][target_id]', $referenced_entities[1]->label() . ' (' . $referenced_entities[1]->id() . ')');
+
+      $this->drupalPostForm(NULL, array(), t('Save'));
       $this->assertFieldValues($entity_name, $referenced_entities);
 
       // Test the 'entity_reference_autocomplete_tags' widget.
@@ -100,14 +105,8 @@ class EntityReferenceIntegrationTest extends WebTestBase {
       $target_id = $referenced_entities[0]->label() . ' (' . $referenced_entities[0]->id() . ')';
       // Test an input of the entity label without a ' (entity_id)' suffix.
       $target_id .= ', ' . $referenced_entities[1]->label();
-      $user_id++;
-      entity_create('user', array(
-        'uid' => $user_id,
-        'name' => $this->randomString(),
-      ))->save();
       $edit = array(
-        'name' => $entity_name,
-        'user_id' => $user_id,
+        'name[0][value]' => $entity_name,
         $this->fieldName . '[target_id]' => $target_id,
       );
       $this->drupalPostForm($this->entityType . '/add', $edit, t('Save'));
@@ -116,14 +115,16 @@ class EntityReferenceIntegrationTest extends WebTestBase {
       // Try to post the form again with no modification and check if the field
       // values remain the same.
       $entity = current(entity_load_multiple_by_properties($this->entityType, array('name' => $entity_name)));
-      $this->drupalPostForm($this->entityType . '/manage/' . $entity->id(), array(), t('Save'));
+      $this->drupalGet($this->entityType . '/manage/' . $entity->id());
+      $this->assertFieldByName($this->fieldName . '[target_id]', $target_id . ' (' . $referenced_entities[1]->id() . ')');
+
+      $this->drupalPostForm(NULL, array(), t('Save'));
       $this->assertFieldValues($entity_name, $referenced_entities);
 
       // Test all the other widgets supported by the entity reference field.
       // Since we don't know the form structure for these widgets, just test
       // that editing and saving an already created entity works.
-      // Also exclude the special author reference widgets.
-      $exclude = array('entity_reference_autocomplete', 'entity_reference_autocomplete_tags', 'route_based_autocomplete', 'author_autocomplete');
+      $exclude = array('entity_reference_autocomplete', 'entity_reference_autocomplete_tags');
       $entity = current(entity_load_multiple_by_properties($this->entityType, array('name' => $entity_name)));
       $supported_widgets = \Drupal::service('plugin.manager.field.widget')->getOptions('entity_reference');
       $supported_widget_types = array_diff(array_keys($supported_widgets), $exclude);
@@ -136,6 +137,36 @@ class EntityReferenceIntegrationTest extends WebTestBase {
         $this->drupalPostForm($this->entityType . '/manage/' . $entity->id(), array(), t('Save'));
         $this->assertFieldValues($entity_name, $referenced_entities);
       }
+
+      // Reset to the default 'entity_reference_autocomplete' widget.
+      entity_get_form_display($this->entityType, $this->bundle, 'default')->setComponent($this->fieldName)->save();
+
+      // Set first entity as the default_value.
+      $field_edit = array(
+        'default_value_input[' . $this->fieldName . '][0][target_id]' => $referenced_entities[0]->label() . ' (' . $referenced_entities[0]->id() . ')',
+      );
+      if ($key == 'content') {
+        $field_edit['settings[handler_settings][target_bundles][' . $referenced_entities[0]->getEntityTypeId() . ']'] = TRUE;
+      }
+      $this->drupalPostForm($this->entityType . '/structure/' . $this->bundle .'/fields/' . $this->entityType . '.' . $this->bundle . '.' . $this->fieldName, $field_edit, t('Save settings'));
+      // Ensure the configuration has the expected dependency on the entity that
+      // is being used a default value.
+      $field = FieldConfig::loadByName($this->entityType, $this->bundle, $this->fieldName);
+      $this->assertTrue(in_array($referenced_entities[0]->getConfigDependencyName(), $field->getDependencies()[$key]), SafeMarkup::format('Expected @type dependency @name found', ['@type' => $key, '@name' => $referenced_entities[0]->getConfigDependencyName()]));
+      // Ensure that the field can be imported without change even after the
+      // default value deleted.
+      $referenced_entities[0]->delete();
+      // Reload the field since deleting the default value can change the field.
+      \Drupal::entityManager()->getStorage($field->getEntityTypeId())->resetCache([$field->id()]);
+      $field = FieldConfig::loadByName($this->entityType, $this->bundle, $this->fieldName);
+      $this->assertConfigEntityImport($field);
+
+      // Once the default value has been removed after saving the dependency
+      // should be removed.
+      $field = FieldConfig::loadByName($this->entityType, $this->bundle, $this->fieldName);
+      $field->save();
+      $dependencies = $field->getDependencies();
+      $this->assertFalse(isset($dependencies[$key]) && in_array($referenced_entities[0]->getConfigDependencyName(), $dependencies[$key]), SafeMarkup::format('@type dependency @name does not exist.', ['@type' => $key, '@name' => $referenced_entities[0]->getConfigDependencyName()]));
     }
   }
 

@@ -7,9 +7,6 @@
 
 namespace Drupal\Core\Database;
 
-use Drupal\Core\Database\TransactionNoActiveException;
-use Drupal\Core\Database\TransactionOutOfOrderException;
-
 /**
  * Base Database API class.
  *
@@ -20,7 +17,7 @@ use Drupal\Core\Database\TransactionOutOfOrderException;
  *
  * @see http://php.net/manual/book.pdo.php
  */
-abstract class Connection implements \Serializable {
+abstract class Connection {
 
   /**
    * The database target this connection is for.
@@ -318,6 +315,20 @@ abstract class Connection implements \Serializable {
   }
 
   /**
+   * Get a fully qualified table name.
+   *
+   * @param string $table
+   *   The name of the table in question.
+   *
+   * @return string
+   */
+  public function getFullQualifiedTableName($table) {
+    $options = $this->getConnectionOptions();
+    $prefix = $this->tablePrefix($table);
+    return $options['database'] . '.' . $prefix . $table;
+  }
+
+  /**
    * Prepares a query string and returns the prepared statement.
    *
    * This method caches prepared statements, reusing them when
@@ -506,7 +517,7 @@ abstract class Connection implements \Serializable {
    *   An associative array of options to control how the query is run. See
    *   the documentation for DatabaseConnection::defaultOptions() for details.
    *
-   * @return \Drupal\Core\Database\StatementInterface
+   * @return \Drupal\Core\Database\StatementInterface|int|null
    *   This method will return one of: the executed statement, the number of
    *   rows affected by the query (not the number matched), or the generated
    *   insert ID of the last query, depending on the value of
@@ -515,11 +526,11 @@ abstract class Connection implements \Serializable {
    *   this method will return NULL and may throw an exception if
    *   $options['throw_exception'] is TRUE.
    *
-   * @throws \PDOException
+   * @throws \Drupal\Core\Database\DatabaseExceptionWrapper
    * @throws \Drupal\Core\Database\IntegrityConstraintViolationException
+   * @throws \InvalidArgumentException
    */
   public function query($query, array $args = array(), $options = array()) {
-
     // Use default values if not already set.
     $options += $this->defaultOptions();
 
@@ -547,32 +558,61 @@ abstract class Connection implements \Serializable {
           $stmt->allowRowCount = TRUE;
           return $stmt->rowCount();
         case Database::RETURN_INSERT_ID:
-          return $this->connection->lastInsertId();
+          $sequence_name = isset($options['sequence_name']) ? $options['sequence_name'] : NULL;
+          return $this->connection->lastInsertId($sequence_name);
         case Database::RETURN_NULL:
-          return;
+          return NULL;
         default:
           throw new \PDOException('Invalid return directive: ' . $options['return']);
       }
     }
     catch (\PDOException $e) {
-      if ($options['throw_exception']) {
-        // Wrap the exception in another exception, because PHP does not allow
-        // overriding Exception::getMessage(). Its message is the extra database
-        // debug information.
-        $query_string = ($query instanceof StatementInterface) ? $stmt->getQueryString() : $query;
-        $message = $e->getMessage() . ": " . $query_string . "; " . print_r($args, TRUE);
-        // Match all SQLSTATE 23xxx errors.
-        if (substr($e->getCode(), -6, -3) == '23') {
-          $exception = new IntegrityConstraintViolationException($message, $e->getCode(), $e);
-        }
-        else {
-          $exception = new DatabaseExceptionWrapper($message, 0, $e);
-        }
-
-        throw $exception;
-      }
-      return NULL;
+      // Most database drivers will return NULL here, but some of them
+      // (e.g. the SQLite driver) may need to re-run the query, so the return
+      // value will be the same as for static::query().
+      return $this->handleQueryException($e, $query, $args, $options);
     }
+  }
+
+  /**
+   * Wraps and re-throws any PDO exception thrown by static::query().
+   *
+   * @param \PDOException $e
+   *   The exception thrown by static::query().
+   * @param $query
+   *   The query executed by static::query().
+   * @param array $args
+   *   An array of arguments for the prepared statement.
+   * @param array $options
+   *   An associative array of options to control how the query is run.
+   *
+   * @return \Drupal\Core\Database\StatementInterface|int|null
+   *   Most database drivers will return NULL when a PDO exception is thrown for
+   *   a query, but some of them may need to re-run the query, so they can also
+   *   return a \Drupal\Core\Database\StatementInterface object or an integer.
+   *
+   * @throws \Drupal\Core\Database\DatabaseExceptionWrapper
+   * @throws \Drupal\Core\Database\IntegrityConstraintViolationException
+   */
+  protected function handleQueryException(\PDOException $e, $query, array $args = array(), $options = array()) {
+    if ($options['throw_exception']) {
+      // Wrap the exception in another exception, because PHP does not allow
+      // overriding Exception::getMessage(). Its message is the extra database
+      // debug information.
+      $query_string = ($query instanceof StatementInterface) ? $query->getQueryString() : $query;
+      $message = $e->getMessage() . ": " . $query_string . "; " . print_r($args, TRUE);
+      // Match all SQLSTATE 23xxx errors.
+      if (substr($e->getCode(), -6, -3) == '23') {
+        $exception = new IntegrityConstraintViolationException($message, $e->getCode(), $e);
+      }
+      else {
+        $exception = new DatabaseExceptionWrapper($message, 0, $e);
+      }
+
+      throw $exception;
+    }
+
+    return NULL;
   }
 
   /**
@@ -581,38 +621,48 @@ abstract class Connection implements \Serializable {
    * Drupal supports an alternate syntax for doing arrays of values. We
    * therefore need to expand them out into a full, executable query string.
    *
-   * @param $query
+   * @param string $query
    *   The query string to modify.
-   * @param $args
+   * @param array $args
    *   The arguments for the query.
    *
-   * @return
+   * @return bool
    *   TRUE if the query was modified, FALSE otherwise.
    */
   protected function expandArguments(&$query, &$args) {
     $modified = FALSE;
 
-    // If the placeholder value to insert is an array, assume that we need
-    // to expand it out into a comma-delimited set of placeholders.
-    foreach (array_filter($args, 'is_array') as $key => $data) {
+    // If the placeholder indicated the value to use is an array,  we need to
+    // expand it out into a comma-delimited set of placeholders.
+    foreach ($args as $key => $data) {
+      $is_bracket_placeholder = substr($key, -2) === '[]';
+      $is_array_data = is_array($data);
+      if ($is_bracket_placeholder && !$is_array_data) {
+        throw new \InvalidArgumentException('Placeholders with a trailing [] can only be expanded with an array of values.');
+      }
+      elseif (!$is_bracket_placeholder) {
+        if ($is_array_data) {
+          throw new \InvalidArgumentException('Placeholders must have a trailing [] if they are to be expanded with an array of values.');
+        }
+        // Scalar placeholder - does not need to be expanded.
+        continue;
+      }
+      // Handle expansion of arrays.
+      $key_name = str_replace('[]', '__', $key);
       $new_keys = array();
-      foreach ($data as $i => $value) {
+      // We require placeholders to have trailing brackets if the developer
+      // intends them to be expanded to an array to make the intent explicit.
+      foreach (array_values($data) as $i => $value) {
         // This assumes that there are no other placeholders that use the same
-        // name.  For example, if the array placeholder is defined as :example
+        // name.  For example, if the array placeholder is defined as :example[]
         // and there is already an :example_2 placeholder, this will generate
         // a duplicate key.  We do not account for that as the calling code
         // is already broken if that happens.
-        $new_keys[$key . '_' . $i] = $value;
+        $new_keys[$key_name . $i] = $value;
       }
 
       // Update the query with the new placeholders.
-      // preg_replace is necessary to ensure the replacement does not affect
-      // placeholders that start with the same exact text. For example, if the
-      // query contains the placeholders :foo and :foobar, and :foo has an
-      // array of values, using str_replace would affect both placeholders,
-      // but using the following preg_replace would only affect :foo because
-      // it is followed by a non-word character.
-      $query = preg_replace('#' . $key . '\b#', implode(', ', array_keys($new_keys)), $query);
+      $query = str_replace($key, implode(', ', array_keys($new_keys)), $query);
 
       // Update the args array with the new placeholders.
       unset($args[$key]);
@@ -911,7 +961,7 @@ abstract class Connection implements \Serializable {
     // in question has already been accidentally committed.
     if (!isset($this->transactionLayers[$savepoint_name])) {
       throw new TransactionNoActiveException();
-     }
+    }
 
     // We need to find the point we're rolling back to, all other savepoints
     // before are no longer needed. If we rolled back other active savepoints,
@@ -1244,30 +1294,10 @@ abstract class Connection implements \Serializable {
   }
 
   /**
-   * {@inheritdoc}
+   * Prevents the database connection from being serialized.
    */
-  public function serialize() {
-    $connection = clone $this;
-    // Don't serialize the PDO connection and other lazy-instantiated members.
-    unset($connection->connection, $connection->schema, $connection->driverClasses);
-    return serialize(get_object_vars($connection));
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function unserialize($serialized) {
-    $data = unserialize($serialized);
-    foreach ($data as $key => $value) {
-      $this->{$key} = $value;
-    }
-    // Re-establish the PDO connection using the original options.
-    $this->connection = static::open($this->connectionOptions);
-
-    // Re-set a Statement class if necessary.
-    if (!empty($this->statementClass)) {
-      $this->connection->setAttribute(\PDO::ATTR_STATEMENT_CLASS, array($this->statementClass, array($this)));
-    }
+  public function __sleep() {
+    throw new \LogicException('The database connection is not serializable. This probably means you are serializing an object that has an indirect reference to the database connection. Adjust your code so that is not necessary. Alternatively, look at DependencySerializationTrait as a temporary solution.');
   }
 
 }

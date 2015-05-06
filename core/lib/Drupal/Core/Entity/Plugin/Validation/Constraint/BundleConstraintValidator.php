@@ -16,11 +16,16 @@ use Symfony\Component\Validator\ConstraintValidator;
 class BundleConstraintValidator extends ConstraintValidator {
 
   /**
-   * Implements \Symfony\Component\Validator\ConstraintValidatorInterface::validate().
+   * {@inheritdoc}
    */
   public function validate($entity, Constraint $constraint) {
-    if (!empty($entity) && !in_array($entity->bundle(), $constraint->getBundleOption())) {
+    if (!isset($entity)) {
+      return;
+    }
+
+    if (!in_array($entity->bundle(), $constraint->getBundleOption())) {
       $this->context->addViolation($constraint->message, array('%bundle' => implode(', ', $constraint->getBundleOption())));
     }
   }
+
 }

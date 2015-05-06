@@ -8,6 +8,7 @@
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\Display\EntityViewDisplayInterface;
 use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\Core\Url;
 use Drupal\node\NodeInterface;
 
 /**
@@ -22,9 +23,9 @@ function statistics_help($route_name, RouteMatchInterface $route_match) {
       $output .= '<h3>' . t('Uses') . '</h3>';
       $output .= '<dl>';
       $output .= '<dt>' . t('Displaying popular content') . '</dt>';
-      $output .= '<dd>' . t('The module includes a <em>Popular content</em> block that displays the most viewed pages today and for all time, and the last content viewed. To use the block, enable <em>Count content views</em> on the <a href="!statistics-settings">statistics settings page</a>, and then you can enable and configure the block on the <a href="!blocks">Block layout page</a>.', array('!statistics-settings' => \Drupal::url('statistics.settings'), '!blocks' => \Drupal::url('block.admin_display'))) . '</dd>';
+      $output .= '<dd>' . t('The module includes a <em>Popular content</em> block that displays the most viewed pages today and for all time, and the last content viewed. To use the block, enable <em>Count content views</em> on the <a href="!statistics-settings">Statistics page</a>, and then you can enable and configure the block on the <a href="!blocks">Block layout page</a>.', array('!statistics-settings' => \Drupal::url('statistics.settings'), '!blocks' => \Drupal::url('block.admin_display'))) . '</dd>';
       $output .= '<dt>' . t('Page view counter') . '</dt>';
-      $output .= '<dd>' . t('The Statistics module includes a counter for each page that increases whenever the page is viewed. To use the counter, enable <em>Count content views</em> on the <a href="!statistics-settings">statistics settings page</a>, and set the necessary <a href="!permissions">permissions</a> (<em>View content hits</em>) so that the counter is visible to the users.', array('!statistics-settings' => \Drupal::url('statistics.settings'), '!permissions' => \Drupal::url('user.admin_permissions', array(), array('fragment' => 'module-statistics')))) . '</dd>';
+      $output .= '<dd>' . t('The Statistics module includes a counter for each page that increases whenever the page is viewed. To use the counter, enable <em>Count content views</em> on the <a href="!statistics-settings">Statistics page</a>, and set the necessary <a href="!permissions">permissions</a> (<em>View content hits</em>) so that the counter is visible to the users.', array('!statistics-settings' => \Drupal::url('statistics.settings'), '!permissions' => \Drupal::url('user.admin_permissions', array(), array('fragment' => 'module-statistics')))) . '</dd>';
       $output .= '</dl>';
       return $output;
 
@@ -39,11 +40,8 @@ function statistics_help($route_name, RouteMatchInterface $route_match) {
 function statistics_node_view(array &$build, EntityInterface $node, EntityViewDisplayInterface $display, $view_mode) {
   if (!$node->isNew() && $view_mode == 'full' && node_is_page($node) && empty($node->in_preview)) {
     $build['statistics_content_counter']['#attached']['library'][] = 'statistics/drupal.statistics';
-    $settings = array('data' => array('nid' => $node->id()), 'url' => url(drupal_get_path('module', 'statistics') . '/statistics.php'));
-    $build['statistics_content_counter']['#attached']['js'][] = array(
-      'data' => array('statistics' => $settings),
-      'type' => 'setting',
-    );
+    $settings = array('data' => array('nid' => $node->id()), 'url' => Url::fromUri('base:' . drupal_get_path('module', 'statistics') . '/statistics.php')->toString());
+    $build['statistics_content_counter']['#attached']['drupalSettings']['statistics'] = $settings;
   }
 }
 
@@ -55,7 +53,7 @@ function statistics_node_links_alter(array &$node_links, NodeInterface $entity, 
     if (\Drupal::currentUser()->hasPermission('view post access counter')) {
       $statistics = statistics_get($entity->id());
       if ($statistics) {
-        $links['statistics_counter']['title'] = format_plural($statistics['totalcount'], '1 view', '@count views');
+        $links['statistics_counter']['title'] = \Drupal::translation()->formatPlural($statistics['totalcount'], '1 view', '@count views');
         $node_links['statistics'] = array(
           '#theme' => 'links__node__statistics',
           '#links' => $links,
@@ -147,41 +145,6 @@ function statistics_get($nid) {
 }
 
 /**
- * Generates a link to a path, truncating the displayed text to a given width.
- *
- * @param string $path
- *   The path to generate the link for.
- * @param int $width
- *   The width to set the displayed text of the path.
- *
- * @return string
- *   A string as a link, truncated to the width, linked to the given $path.
- */
-function _statistics_link($path, $width = 35) {
-  $title = \Drupal::service('path.alias_manager')->getAliasByPath($path);
-  $title = truncate_utf8($title, $width, FALSE, TRUE);
-  return l($title, $path);
-}
-
-/**
- * Formats an item for display, including both the item title and the link.
- *
- * @param string $title
- *   The text to link to a path; will be truncated to a maximum width of 35.
- * @param string $path
- *   The path to link to; will default to '/'.
- *
- * @return string
- *   An HTML string with $title linked to the $path.
- */
-function _statistics_format_item($title, $path) {
-  $path = ($path ? $path : '/');
-  $output  = ($title ? "$title<br />" : '');
-  $output .= _statistics_link($path);
-  return $output;
-}
-
-/**
  * Implements hook_ENTITY_TYPE_predelete() for node entities.
  */
 function statistics_node_predelete(EntityInterface $node) {
@@ -206,10 +169,12 @@ function statistics_ranking() {
           'on' => 'node_counter.nid = i.sid',
         ),
         // Inverse law that maps the highest view count on the site to 1 and 0
-        // to 0. Note that the CAST here is necessary for PostgreSQL, because
-        // the PostgreSQL PDO driver sometimes puts values in as strings
-        // instead of numbers in complex expressions like this.
-        'score' => '2.0 - 2.0 / (1.0 + node_counter.totalcount * (CAST (:statistics_scale AS DECIMAL(10,4))))',
+        // to 0. Note that the ROUND here is necessary for PostgreSQL and SQLite
+        // in order to ensure that the :statistics_scale argument is treated as
+        // a numeric type, because the PostgreSQL PDO driver sometimes puts
+        // values in as strings instead of numbers in complex expressions like
+        // this.
+        'score' => '2.0 - 2.0 / (1.0 + node_counter.totalcount * (ROUND(:statistics_scale, 4)))',
         'arguments' => array(':statistics_scale' => \Drupal::state()->get('statistics.node_counter_scale') ?: 0),
       ),
     );

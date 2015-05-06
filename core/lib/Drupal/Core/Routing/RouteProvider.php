@@ -7,8 +7,10 @@
 
 namespace Drupal\Core\Routing;
 
-use Drupal\Component\Utility\String;
+use Drupal\Core\Path\CurrentPathStack;
 use Drupal\Core\State\StateInterface;
+use Symfony\Cmf\Component\Routing\PagedRouteCollection;
+use Symfony\Cmf\Component\Routing\PagedRouteProviderInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Exception\RouteNotFoundException;
@@ -20,7 +22,7 @@ use \Drupal\Core\Database\Connection;
 /**
  * A Route Provider front-end for all Drupal-stored routes.
  */
-class RouteProvider implements RouteProviderInterface, EventSubscriberInterface {
+class RouteProvider implements PreloadableRouteProviderInterface, PagedRouteProviderInterface, EventSubscriberInterface {
 
   /**
    * The database connection from which to read route information.
@@ -37,13 +39,6 @@ class RouteProvider implements RouteProviderInterface, EventSubscriberInterface 
   protected $tableName;
 
   /**
-   * The route builder.
-   *
-   * @var \Drupal\Core\Routing\RouteBuilderInterface
-   */
-  protected $routeBuilder;
-
-  /**
    * The state.
    *
    * @var \Drupal\Core\State\StateInterface
@@ -53,27 +48,41 @@ class RouteProvider implements RouteProviderInterface, EventSubscriberInterface 
   /**
    * A cache of already-loaded routes, keyed by route name.
    *
-   * @var array
+   * @var \Symfony\Component\Routing\Route[]
    */
   protected $routes = array();
+
+  /**
+   * A cache of already-loaded serialized routes, keyed by route name.
+   *
+   * @var string[]
+   */
+  protected $serializedRoutes = [];
+
+  /**
+   * The current path.
+   *
+   * @var \Drupal\Core\Path\CurrentPathStack
+   */
+  protected $currentPath;
 
   /**
    * Constructs a new PathMatcher.
    *
    * @param \Drupal\Core\Database\Connection $connection
    *   A database connection object.
-   * @param \Drupal\Core\Routing\RouteBuilderInterface $route_builder
-   *   The route builder.
    * @param \Drupal\Core\State\StateInterface $state
    *   The state.
+   * @param \Drupal\Core\Path\CurrentPathStack $current_path
+   *   THe current path.
    * @param string $table
    *   The table in the database to use for matching.
    */
-  public function __construct(Connection $connection, RouteBuilderInterface $route_builder, StateInterface $state, $table = 'router') {
+  public function __construct(Connection $connection, StateInterface $state, CurrentPathStack $current_path, $table = 'router') {
     $this->connection = $connection;
-    $this->routeBuilder = $route_builder;
     $this->state = $state;
     $this->tableName = $table;
+    $this->currentPath = $current_path;
   }
 
   /**
@@ -102,31 +111,9 @@ class RouteProvider implements RouteProviderInterface, EventSubscriberInterface 
    * @todo Should this method's found routes also be included in the cache?
    */
   public function getRouteCollectionForRequest(Request $request) {
+    $path = $this->currentPath->getPath($request);
 
-    // The '_system_path' has language prefix stripped and path alias resolved,
-    // whereas getPathInfo() returns the requested path. In Drupal, the request
-    // always contains a system_path attribute, but this component may get
-    // adopted by non-Drupal projects. Some unit tests also skip initializing
-    // '_system_path'.
-    // @todo Consider abstracting this to a separate object.
-    if ($request->attributes->has('_system_path')) {
-      // _system_path never has leading or trailing slashes.
-      $path = '/' . $request->attributes->get('_system_path');
-    }
-    else {
-      // getPathInfo() always has leading slash, and might or might not have a
-      // trailing slash.
-      $path = rtrim($request->getPathInfo(), '/');
-    }
-
-    $collection = $this->getRoutesByPath($path);
-
-    // Try rebuilding the router if it is necessary.
-    if (!$collection->count() && $this->routeBuilder->rebuildIfNeeded()) {
-      $collection = $this->getRoutesByPath($path);
-    }
-
-    return $collection;
+    return $this->getRoutesByPath(rtrim($path, '/'));
   }
 
   /**
@@ -151,35 +138,32 @@ class RouteProvider implements RouteProviderInterface, EventSubscriberInterface 
   }
 
   /**
-   * Find many routes by their names using the provided list of names.
-   *
-   * Note that this method may not throw an exception if some of the routes
-   * are not found. It will just return the list of those routes it found.
-   *
-   * This method exists in order to allow performance optimizations. The
-   * simple implementation could be to just repeatedly call
-   * $this->getRouteByName().
-   *
-   * @param array $names
-   *   The list of names to retrieve.
-   *
-   * @return \Symfony\Component\Routing\Route[]
-   *   Iterable thing with the keys the names of the $names argument.
+   * {@inheritdoc}
    */
-  public function getRoutesByNames($names) {
-
+  public function preLoadRoutes($names) {
     if (empty($names)) {
       throw new \InvalidArgumentException('You must specify the route names to load');
     }
 
-    $routes_to_load = array_diff($names, array_keys($this->routes));
-
+    $routes_to_load = array_diff($names, array_keys($this->routes), array_keys($this->serializedRoutes));
     if ($routes_to_load) {
-      $result = $this->connection->query('SELECT name, route FROM {' . $this->connection->escapeTable($this->tableName) . '} WHERE name IN (:names)', array(':names' => $routes_to_load));
+      $result = $this->connection->query('SELECT name, route FROM {' . $this->connection->escapeTable($this->tableName) . '} WHERE name IN ( :names[] )', array(':names[]' => $routes_to_load));
       $routes = $result->fetchAllKeyed();
+      $this->serializedRoutes += $routes;
+    }
+  }
 
-      foreach ($routes as $name => $route) {
-        $this->routes[$name] = unserialize($route);
+  /**
+   * {@inheritdoc}
+   */
+  public function getRoutesByNames($names) {
+    $this->preLoadRoutes($names);
+
+    foreach ($names as $name) {
+      // The specified route name might not exist or might be serialized.
+      if (!isset($this->routes[$name]) && isset($this->serializedRoutes[$name])) {
+        $this->routes[$name] = unserialize($this->serializedRoutes[$name]);
+        unset($this->serializedRoutes[$name]);
       }
     }
 
@@ -285,8 +269,8 @@ class RouteProvider implements RouteProviderInterface, EventSubscriberInterface 
       return $collection;
     }
 
-    $routes = $this->connection->query("SELECT name, route FROM {" . $this->connection->escapeTable($this->tableName) . "} WHERE pattern_outline IN (:patterns) ORDER BY fit DESC, name ASC", array(
-      ':patterns' => $ancestors,
+    $routes = $this->connection->query("SELECT name, route FROM {" . $this->connection->escapeTable($this->tableName) . "} WHERE pattern_outline IN ( :patterns[] ) ORDER BY fit DESC, name ASC", array(
+      ':patterns[]' => $ancestors,
     ))
       ->fetchAllKeyed();
 
@@ -304,7 +288,7 @@ class RouteProvider implements RouteProviderInterface, EventSubscriberInterface 
    * {@inheritdoc}
    */
   public function getAllRoutes() {
-    return new LazyLoadingRouteCollection($this->connection, $this->tableName);
+    return new PagedRouteCollection($this);
   }
 
   /**
@@ -312,6 +296,7 @@ class RouteProvider implements RouteProviderInterface, EventSubscriberInterface 
    */
   public function reset() {
     $this->routes  = array();
+    $this->serializedRoutes = array();
   }
 
   /**
@@ -320,6 +305,34 @@ class RouteProvider implements RouteProviderInterface, EventSubscriberInterface 
   static function getSubscribedEvents() {
     $events[RoutingEvents::FINISHED][] = array('reset');
     return $events;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getRoutesPaged($offset, $length = NULL) {
+    $select = $this->connection->select($this->tableName, 'router')
+      ->fields('router', ['name', 'route']);
+
+    if (isset($length)) {
+      $select->range($offset, $length);
+    }
+
+    $routes = $select->execute()->fetchAllKeyed();
+
+    $result = [];
+    foreach ($routes as $name => $route) {
+      $result[$name] = unserialize($route);
+    }
+
+    return $result;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getRoutesCount() {
+    return $this->connection->query("SELECT COUNT(*) FROM {" . $this->connection->escapeTable($this->tableName) . "}")->fetchField();
   }
 
 }

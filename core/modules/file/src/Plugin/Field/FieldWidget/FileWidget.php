@@ -7,13 +7,19 @@
 
 namespace Drupal\file\Plugin\Field\FieldWidget;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Component\Utility\NestedArray;
+use Drupal\Core\Field\FieldDefinitionInterface;
 use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\Field\WidgetBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Render\Element;
+use Drupal\Core\Render\ElementInfoManagerInterface;
+use Drupal\Core\Url;
+use Drupal\file\Element\ManagedFile;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Plugin implementation of the 'file_generic' widget.
@@ -26,7 +32,22 @@ use Drupal\Core\Render\Element;
  *   }
  * )
  */
-class FileWidget extends WidgetBase {
+class FileWidget extends WidgetBase implements ContainerFactoryPluginInterface {
+
+  /**
+   * {@inheritdoc}
+   */
+  public function __construct($plugin_id, $plugin_definition, FieldDefinitionInterface $field_definition, array $settings, array $third_party_settings, ElementInfoManagerInterface $element_info) {
+    parent::__construct($plugin_id, $plugin_definition, $field_definition, $settings, $third_party_settings);
+    $this->elementInfo = $element_info;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+    return new static($plugin_id, $plugin_definition,$configuration['field_definition'], $configuration['settings'], $configuration['third_party_settings'], $container->get('element_info'));
+  }
 
   /**
    * {@inheritdoc}
@@ -96,7 +117,7 @@ class FileWidget extends WidgetBase {
         break;
     }
 
-    $title = String::checkPlain($this->fieldDefinition->getLabel());
+    $title = SafeMarkup::checkPlain($this->fieldDefinition->getLabel());
     $description = $this->fieldFilterXss($this->fieldDefinition->getDescription());
 
     $elements = array();
@@ -137,6 +158,8 @@ class FileWidget extends WidgetBase {
     // Add one more empty row for new uploads except when this is a programmed
     // multiple form as it is not necessary.
     if ($empty_single_allowed || $empty_multiple_allowed) {
+      // Create a new empty item.
+      $items->appendItem();
       $element = array(
         '#title' => $title,
         '#description' => $description,
@@ -208,7 +231,7 @@ class FileWidget extends WidgetBase {
 
     // Essentially we use the managed_file type, extended with some
     // enhancements.
-    $element_info = element_info('managed_file');
+    $element_info = $this->elementInfo->getInfo('managed_file');
     $element += array(
       '#type' => 'managed_file',
       '#upload_location' => $items[$delta]->getUploadLocation(),
@@ -289,7 +312,7 @@ class FileWidget extends WidgetBase {
     }
 
     // We depend on the managed file element to handle uploads.
-    $return = file_managed_file_value($element, $input, $form_state);
+    $return = ManagedFile::valueCallback($element, $input, $form_state);
 
     // Ensure that all the required properties are returned even if empty.
     $return += array(
@@ -349,13 +372,17 @@ class FileWidget extends WidgetBase {
     $element['#theme'] = 'file_widget';
 
     // Add the display field if enabled.
-    if ($element['#display_field'] && $item['fids']) {
+    if ($element['#display_field']) {
       $element['display'] = array(
         '#type' => empty($item['fids']) ? 'hidden' : 'checkbox',
         '#title' => t('Include file in display'),
-        '#value' => isset($item['display']) ? $item['display'] : $element['#display_default'],
         '#attributes' => array('class' => array('file-display')),
       );
+      if (isset($item['display'])) {
+        $element['display']['#value'] = $item['display'] ? '1' : '';
+      } else {
+        $element['display']['#value'] = $element['#display_default'];
+      }
     }
     else {
       $element['display'] = array(
@@ -380,7 +407,7 @@ class FileWidget extends WidgetBase {
     // file, the entire group of file fields is updated together.
     if ($element['#cardinality'] != 1) {
       $parents = array_slice($element['#array_parents'], 0, -1);
-      $new_path = 'file/ajax';
+      $new_url = Url::fromRoute('file.ajax_upload');
       $new_options = array(
         'query' => array(
           'element_parents' => implode('/', $parents),
@@ -391,7 +418,7 @@ class FileWidget extends WidgetBase {
       $new_wrapper = $field_element['#id'] . '-ajax-wrapper';
       foreach (Element::children($element) as $key) {
         if (isset($element[$key]['#ajax'])) {
-          $element[$key]['#ajax']['path'] = $new_path;
+          $element[$key]['#ajax']['url'] = $new_url->setOptions($new_options);
           $element[$key]['#ajax']['options'] = $new_options;
           $element[$key]['#ajax']['wrapper'] = $new_wrapper;
         }

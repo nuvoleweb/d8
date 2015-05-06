@@ -44,7 +44,7 @@ class QueryTest extends QueryPluginBase {
     parent::buildOptionsForm($form, $form_state);
 
     $form['test_setting'] = array(
-      '#title' => t('Test setting'),
+      '#title' => $this->t('Test setting'),
       '#type' => 'textfield',
       '#default_value' => $this->options['test_setting'],
     );
@@ -91,7 +91,7 @@ class QueryTest extends QueryPluginBase {
   public function build(ViewExecutable $view) {
     $this->view = $view;
     // @todo Support pagers for know, a php based one would probably match.
-    // @todo You could add a string representatin of the query.
+    // @todo You could add a string representation of the query.
     $this->view->build_info['query'] = "";
     $this->view->build_info['count_query'] = "";
 }
@@ -146,5 +146,13 @@ class QueryTest extends QueryPluginBase {
     return FALSE;
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    return parent::calculateDependencies() + [
+      'content' => ['QueryTest'],
+    ];
+  }
 
 }

@@ -7,7 +7,9 @@
 
 namespace Drupal\system\Tests\Database;
 
+use Doctrine\Common\Reflection\StaticReflectionProperty;
 use Drupal\Core\Database\Database;
+use Drupal\Core\Site\Settings;
 use Drupal\simpletest\KernelTestBase;
 
 /**
@@ -216,58 +218,6 @@ class ConnectionUnitTest extends KernelTestBase {
 
     // Verify that we are back to the original connection count.
     $this->assertNoConnection($id);
-  }
-
-  /**
-   * Tests the serialization and unserialization of a database connection.
-   */
-  public function testConnectionSerialization() {
-    $db = Database::getConnection('default', 'default');
-
-    try {
-      $serialized = serialize($db);
-      $this->pass('The database connection can be serialized.');
-
-      $unserialized = unserialize($serialized);
-      $this->assertTrue(get_class($unserialized) === get_class($db));
-    }
-    catch (\Exception $e) {
-      $this->fail('The database connection cannot be serialized.');
-    }
-
-    // Ensure that all properties on the unserialized object are the same.
-    $db_reflection = new \ReflectionObject($db);
-    $unserialized_reflection = new \ReflectionObject($unserialized);
-    foreach ($db_reflection->getProperties() as $value) {
-      $value->setAccessible(TRUE);
-
-      // Skip properties that are lazily populated on access.
-      if ($value->getName() === 'driverClasses' || $value->getName() === 'schema') {
-        continue;
-      }
-
-      $unserialized_property = $unserialized_reflection->getProperty($value->getName());
-      $unserialized_property->setAccessible(TRUE);
-      // For the PDO object, just check the statement class attribute.
-      if ($value->getName() == 'connection') {
-        $db_statement_class = $unserialized_property->getValue($db)->getAttribute(\PDO::ATTR_STATEMENT_CLASS);
-        $unserialized_statement_class = $unserialized_property->getValue($unserialized)->getAttribute(\PDO::ATTR_STATEMENT_CLASS);
-        // Assert the statement class.
-        $this->assertEqual($unserialized_statement_class[0], $db_statement_class[0]);
-        // Assert the connection argument that is passed into the statement.
-        $this->assertEqual(get_class($unserialized_statement_class[1][0]), get_class($db_statement_class[1][0]));
-      }
-      else {
-        $actual = $unserialized_property->getValue($unserialized);
-        $expected = $value->getValue($db);
-        $this->assertEqual($actual, $expected, vsprintf('Unserialized Connection property %s value %s is equal to expected %s', array(
-          var_export($value->getName(), TRUE),
-          is_object($actual) ? print_r($actual, TRUE) : var_export($actual, TRUE),
-          is_object($expected) ? print_r($expected, TRUE) : var_export($expected, TRUE),
-        )));
-      }
-    }
-
   }
 
   /**

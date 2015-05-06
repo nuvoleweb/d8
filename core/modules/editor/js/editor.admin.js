@@ -84,22 +84,22 @@
        *
        * This generates an object of this form:
        *   var universe = {
-     *     a: {
-     *       'touchedByAllowedPropertyRule': false,
-     *       'tag': false,
-     *       'attributes:href': false,
-     *       'classes:external': false,
-     *     },
-     *     strong: {
-     *       'touchedByAllowedPropertyRule': false,
-     *       'tag': false,
-     *     },
-     *     img: {
-     *       'touchedByAllowedPropertyRule': false,
-     *       'tag': false,
-     *       'attributes:src': false
-     *     }
-     *   };
+       *     a: {
+       *       'touchedByAllowedPropertyRule': false,
+       *       'tag': false,
+       *       'attributes:href': false,
+       *       'classes:external': false,
+       *     },
+       *     strong: {
+       *       'touchedByAllowedPropertyRule': false,
+       *       'tag': false,
+       *     },
+       *     img: {
+       *       'touchedByAllowedPropertyRule': false,
+       *       'tag': false,
+       *       'attributes:src': false
+       *     }
+       *   };
        *
        * In this example, the given text editor feature resulted in the above
        * universe, which shows that it must be allowed to generate the a, strong
@@ -293,8 +293,8 @@
 
         // Check if a tag in the universe is forbidden.
         var allRequiredTags = _.keys(universe);
-        var filterRule, i;
-        for (i = 0; i < filterStatus.rules.length; i++) {
+        var filterRule;
+        for (var i = 0; i < filterStatus.rules.length; i++) {
           filterRule = filterStatus.rules[i];
           if (filterRule.allow === false) {
             if (_.intersection(allRequiredTags, filterRule.tags).length > 0) {
@@ -305,16 +305,15 @@
 
         // Check if a property value of a tag in the universe is forbidden.
         // For all filter rules…
-        var j, k;
-        for (i = 0; i < filterStatus.rules.length; i++) {
-          filterRule = filterStatus.rules[i];
+        for (var n = 0; n < filterStatus.rules.length; n++) {
+          filterRule = filterStatus.rules[n];
           // … if there are tags with restricted property values …
           if (filterRule.restrictedTags.tags.length && !emptyProperties(filterRule.restrictedTags.forbidden)) {
             // … for all those tags …
-            for (j = 0; j < filterRule.restrictedTags.tags.length; j++) {
+            for (var j = 0; j < filterRule.restrictedTags.tags.length; j++) {
               var tag = filterRule.restrictedTags.tags[j];
               // … then iterate over all properties …
-              for (k = 0; k < properties.length; k++) {
+              for (var k = 0; k < properties.length; k++) {
                 var property = properties[k];
                 // … and return true if just one of the forbidden property values
                 // for this tag and property is listed in the universe.
@@ -339,12 +338,13 @@
         var properties = ['attributes', 'styles', 'classes'];
 
         // Check if a tag in the universe is allowed.
-        var filterRule, tag, i, j;
-        for (i = 0; !_.isEmpty(universe) && i < filterStatus.rules.length; i++) {
-          filterRule = filterStatus.rules[i];
+        var filterRule;
+        var tag;
+        for (var l = 0; !_.isEmpty(universe) && l < filterStatus.rules.length; l++) {
+          filterRule = filterStatus.rules[l];
           if (filterRule.allow === true) {
-            for (j = 0; !_.isEmpty(universe) && j < filterRule.tags.length; j++) {
-              tag = filterRule.tags[j];
+            for (var m = 0; !_.isEmpty(universe) && m < filterRule.tags.length; m++) {
+              tag = filterRule.tags[m];
               if (_.has(universe, tag)) {
                 universe[tag].tag = true;
                 deleteFromUniverseIfAllowed(universe, tag);
@@ -355,16 +355,15 @@
 
         // Check if a property value of a tag in the universe is allowed.
         // For all filter rules…
-        var k;
-        for (i = 0; !_.isEmpty(universe) && i < filterStatus.rules.length; i++) {
+        for (var i = 0; !_.isEmpty(universe) && i < filterStatus.rules.length; i++) {
           filterRule = filterStatus.rules[i];
           // … if there are tags with restricted property values …
           if (filterRule.restrictedTags.tags.length && !emptyProperties(filterRule.restrictedTags.allowed)) {
             // … for all those tags …
-            for (j = 0; !_.isEmpty(universe) && j < filterRule.restrictedTags.tags.length; j++) {
+            for (var j = 0; !_.isEmpty(universe) && j < filterRule.restrictedTags.tags.length; j++) {
               tag = filterRule.restrictedTags.tags[j];
               // … then iterate over all properties …
-              for (k = 0; k < properties.length; k++) {
+              for (var k = 0; k < properties.length; k++) {
                 var property = properties[k];
                 // … and try to delete this tag from the universe if just one of
                 // the allowed property values for this tag and property is listed
@@ -550,8 +549,8 @@
    *  - classes: ['external', 'internal']
    */
   Drupal.EditorFeatureHTMLRule = function () {
-    this.required = { tags: [], attributes: [], styles: [], classes: [] };
-    this.allowed = { tags: [], attributes: [], styles: [], classes: [] };
+    this.required = {tags: [], attributes: [], styles: [], classes: []};
+    this.allowed = {tags: [], attributes: [], styles: [], classes: []};
     this.raw = null;
   };
 
@@ -616,36 +615,36 @@
    * Examples:
    *  - Whitelist the "p", "strong" and "a" HTML tags:
    *    {
- *      tags: ['p', 'strong', 'a'],
- *      allow: true,
- *      restrictedTags: {
- *        tags: [],
- *        allowed: { attributes: [], styles: [], classes: [] },
- *        forbidden: { attributes: [], styles: [], classes: [] }
- *      }
- *    }
+   *      tags: ['p', 'strong', 'a'],
+   *      allow: true,
+   *      restrictedTags: {
+   *        tags: [],
+   *        allowed: { attributes: [], styles: [], classes: [] },
+   *        forbidden: { attributes: [], styles: [], classes: [] }
+   *      }
+   *    }
    *  - For the "a" HTML tag, only allow the "href" attribute and the "external"
    *    class and disallow the "target" attribute.
    *    {
- *      tags: [],
- *      allow: null,
- *      restrictedTags: {
- *        tags: ['a'],
- *        allowed: { attributes: ['href'], styles: [], classes: ['external'] },
- *        forbidden: { attributes: ['target'], styles: [], classes: [] }
- *      }
- *    }
+   *      tags: [],
+   *      allow: null,
+   *      restrictedTags: {
+   *        tags: ['a'],
+   *        allowed: { attributes: ['href'], styles: [], classes: ['external'] },
+   *        forbidden: { attributes: ['target'], styles: [], classes: [] }
+   *      }
+   *    }
    *  - For all tags, allow the "data-*" attribute (that is, any attribute that
    *    begins with "data-").
    *    {
- *      tags: [],
- *      allow: null,
- *      restrictedTags: {
- *        tags: ['*'],
- *        allowed: { attributes: ['data-*'], styles: [], classes: [] },
- *        forbidden: { attributes: [], styles: [], classes: [] }
- *      }
- *    }
+   *      tags: [],
+   *      allow: null,
+   *      restrictedTags: {
+   *        tags: ['*'],
+   *        allowed: { attributes: ['data-*'], styles: [], classes: [] },
+   *        forbidden: { attributes: [], styles: [], classes: [] }
+   *      }
+   *    }
    */
   Drupal.FilterHTMLRule = function () {
     return {
@@ -655,8 +654,8 @@
       // Apply restrictions to properties set on tags.
       restrictedTags: {
         tags: [],
-        allowed: { attributes: [], styles: [], classes: [] },
-        forbidden: { attributes: [], styles: [], classes: [] }
+        allowed: {attributes: [], styles: [], classes: []},
+        forbidden: {attributes: [], styles: [], classes: []}
       }
     };
   };
@@ -714,7 +713,7 @@
     attach: function (context, settings) {
       var $context = $(context);
 
-      $context.find('#filters-status-wrapper input.form-checkbox').once('filter-editor-status', function () {
+      $context.find('#filters-status-wrapper input.form-checkbox').once('filter-editor-status').each(function () {
         var $checkbox = $(this);
         var nameAttribute = $checkbox.attr('name');
 

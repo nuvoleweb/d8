@@ -12,10 +12,10 @@
   // Indicates whether the page should be reloaded after in-place editing has
   // shut down. A page reload is necessary to re-instate the original HTML of the
   // edited fields if in-place editing has been canceled and one or more of the
-  // entity's fields were saved to TempStore: one of them may have been changed to
-  // the empty value and hence may have been rerendered as the empty string, which
-  // makes it impossible for Quick Edit to know where to restore the original
-  // HTML.
+  // entity's fields were saved to PrivateTempStore: one of them may have been
+  // changed to the empty value and hence may have been rerendered as the empty
+  // string, which makes it impossible for Quick Edit to know where to restore
+  // the original HTML.
   var reload = false;
 
   Drupal.quickedit.AppView = Backbone.View.extend({
@@ -175,7 +175,8 @@
         // If it's not against the general principle, then here are more
         // disallowed cases to check.
         if (accept) {
-          var activeField, activeFieldState;
+          var activeField;
+          var activeFieldState;
           // Ensure only one field (editor) at a time is active … but allow a user
           // to hop from one field to the next, even if we still have to start
           // saving the field that is currently active: assume it will be valid,
@@ -297,7 +298,7 @@
      */
     teardownEditor: function (fieldModel) {
       // Early-return if this field was not yet decorated.
-      if (fieldModel.editorView === undefined) {
+      if (typeof fieldModel.editorView === 'undefined') {
         return;
       }
 
@@ -470,7 +471,7 @@
           _.defer(function () {
             // Set the field's state to 'inactive', to enable the updating of its
             // DOM value.
-            fieldModel.set('state', 'inactive', { reason: 'rerender' });
+            fieldModel.set('state', 'inactive', {reason: 'rerender'});
 
             renderField();
           });
@@ -507,7 +508,7 @@
         // Find all instances of fields that display the same logical field (same
         // entity, same field, just a different instance and maybe a different
         // view mode).
-        .where({ logicalFieldID: updatedField.get('logicalFieldID') })
+        .where({logicalFieldID: updatedField.get('logicalFieldID')})
         .forEach(function (field) {
           // Ignore the field that was already updated.
           if (field === updatedField) {
@@ -525,7 +526,7 @@
           // that view mode's re-rendered version.
           else {
             if (field.getViewMode() in htmlForOtherViewModes) {
-              field.set('html', htmlForOtherViewModes[field.getViewMode()], { propagation: true });
+              field.set('html', htmlForOtherViewModes[field.getViewMode()], {propagation: true});
             }
           }
         });

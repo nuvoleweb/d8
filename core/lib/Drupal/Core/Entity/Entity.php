@@ -9,15 +9,13 @@ namespace Drupal\Core\Entity;
 
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\DependencyInjection\DependencySerializationTrait;
-use Drupal\Component\Utility\NestedArray;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Component\Utility\Unicode;
 use Drupal\Core\Config\Entity\Exception\ConfigEntityIdLengthException;
-use Drupal\Core\Entity\Exception\AmbiguousEntityClassException;
-use Drupal\Core\Entity\Exception\NoCorrespondingEntityClassException;
 use Drupal\Core\Entity\Exception\UndefinedLinkTemplateException;
 use Drupal\Core\Language\Language;
 use Drupal\Core\Language\LanguageInterface;
+use Drupal\Core\Link;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\Url;
 
@@ -25,7 +23,10 @@ use Drupal\Core\Url;
  * Defines a base entity class.
  */
 abstract class Entity implements EntityInterface {
-  use DependencySerializationTrait;
+
+  use DependencySerializationTrait {
+    __sleep as traitSleep;
+  }
 
   /**
    * The entity type.
@@ -40,6 +41,13 @@ abstract class Entity implements EntityInterface {
    * @var bool
    */
   protected $enforceIsNew;
+
+  /**
+   * A typed data object wrapping this entity.
+   *
+   * @var \Drupal\Core\TypedData\ComplexDataInterface
+   */
+  protected $typedData;
 
   /**
    * Constructs an Entity object.
@@ -147,17 +155,24 @@ abstract class Entity implements EntityInterface {
   /**
    * {@inheritdoc}
    */
-  public function urlInfo($rel = 'canonical') {
-    if ($this->isNew()) {
-      throw new EntityMalformedException(sprintf('The "%s" entity type has not been saved, and cannot have a URI.', $this->getEntityTypeId()));
+  public function urlInfo($rel = 'canonical', array $options = []) {
+    if ($this->id() === NULL) {
+      throw new EntityMalformedException(sprintf('The "%s" entity cannot have a URI as it does have an ID', $this->getEntityTypeId()));
     }
 
     // The links array might contain URI templates set in annotations.
     $link_templates = $this->linkTemplates();
 
+    // Links pointing to the current revision point to the actual entity. So
+    // instead of using the 'revision' link, use the 'canonical' link.
+    if ($rel === 'revision' && $this instanceof RevisionableInterface && $this->isDefaultRevision()) {
+      $rel = 'canonical';
+    }
+
     if (isset($link_templates[$rel])) {
-      // If there is a template for the given relationship type, generate the path.
-      $uri = new Url($link_templates[$rel], $this->urlRouteParameters($rel));
+      $route_parameters = $this->urlRouteParameters($rel);
+      $route_name = "entity.{$this->entityTypeId}." . str_replace(array('-', 'drupal:'), array('_', ''), $rel);
+      $uri = new Url($route_name, $route_parameters);
     }
     else {
       $bundle = $this->bundle();
@@ -177,20 +192,21 @@ abstract class Entity implements EntityInterface {
         $uri = call_user_func($uri_callback, $this);
       }
       else {
-        throw new UndefinedLinkTemplateException(String::format('No link template "@rel" found for the "@entity_type" entity type', array(
+        throw new UndefinedLinkTemplateException(SafeMarkup::format('No link template "@rel" found for the "@entity_type" entity type', array(
           '@rel' => $rel,
           '@entity_type' => $this->getEntityTypeId(),
         )));
       }
     }
 
-    // Pass the entity data to url() so that alter functions do not need to
-    // look up this entity again.
+    // Pass the entity data through as options, so that alter functions do not
+    // need to look up this entity again.
     $uri
       ->setOption('entity_type', $this->getEntityTypeId())
       ->setOption('entity', $this);
-
-    return $uri;
+    $uri_options = $uri->getOptions();
+    $uri_options += $options;
+    return $uri->setOptions($uri_options);
   }
 
   /**
@@ -215,10 +231,23 @@ abstract class Entity implements EntityInterface {
    * Returns an array link templates.
    *
    * @return array
-   *   An array of link templates containing route names.
+   *   An array of link templates containing paths.
    */
   protected function linkTemplates() {
     return $this->getEntityType()->getLinkTemplates();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function link($text = NULL, $rel = 'canonical', array $options = []) {
+    if (is_null($text)) {
+      $text = $this->label();
+    }
+    $url = $this->urlInfo($rel);
+    $options += $url->getOptions();
+    $url->setOptions($options);
+    return (new Link($text, $url))->toString();
   }
 
   /**
@@ -251,8 +280,15 @@ abstract class Entity implements EntityInterface {
    *   An array of URI placeholders.
    */
   protected function urlRouteParameters($rel) {
-    // The entity ID is needed as a route parameter.
-    $uri_route_parameters[$this->getEntityTypeId()] = $this->id();
+    $uri_route_parameters = [];
+
+    if ($rel != 'collection') {
+      // The entity ID is needed as a route parameter.
+      $uri_route_parameters[$this->getEntityTypeId()] = $this->id();
+    }
+    if ($rel === 'revision') {
+      $uri_route_parameters[$this->getEntityTypeId() . '_revision'] = $this->getRevisionId();
+    }
 
     return $uri_route_parameters;
   }
@@ -287,7 +323,8 @@ abstract class Entity implements EntityInterface {
    * {@inheritdoc}
    */
   public function language() {
-    $language = $this->languageManager()->getLanguage($this->langcode);
+    $langcode = $this->{$this->getEntityType()->getKey('langcode')};
+    $language = $this->languageManager()->getLanguage($langcode);
     if (!$language) {
       // Make sure we return a proper language object.
       $langcode = $this->langcode ?: LanguageInterface::LANGCODE_NOT_SPECIFIED;
@@ -344,7 +381,7 @@ abstract class Entity implements EntityInterface {
     if ($this->getEntityType()->getBundleOf()) {
       // Throw an exception if the bundle ID is longer than 32 characters.
       if (Unicode::strlen($this->id()) > EntityTypeInterface::BUNDLE_MAX_LENGTH) {
-        throw new ConfigEntityIdLengthException(String::format(
+        throw new ConfigEntityIdLengthException(SafeMarkup::format(
           'Attempt to create a bundle with an ID longer than @max characters: @id.', array(
             '@max' => EntityTypeInterface::BUNDLE_MAX_LENGTH,
             '@id' => $this->id(),
@@ -358,7 +395,6 @@ abstract class Entity implements EntityInterface {
    * {@inheritdoc}
    */
   public function postSave(EntityStorageInterface $storage, $update = TRUE) {
-    $this->onSaveOrDelete();
     $this->invalidateTagsOnSave($update);
   }
 
@@ -384,7 +420,7 @@ abstract class Entity implements EntityInterface {
    * {@inheritdoc}
    */
   public static function postDelete(EntityStorageInterface $storage, array $entities) {
-    self::invalidateTagsOnDelete($entities);
+    static::invalidateTagsOnDelete($storage->getEntityType(), $entities);
   }
 
   /**
@@ -403,20 +439,30 @@ abstract class Entity implements EntityInterface {
   /**
    * {@inheritdoc}
    */
-  public function getCacheTag() {
-    return array($this->entityTypeId => array($this->id()));
+  public function getCacheContexts() {
+    return [];
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getListCacheTags() {
+  public function getCacheTags() {
     // @todo Add bundle-specific listing cache tag? https://drupal.org/node/2145751
-    return array($this->entityTypeId . 's' => TRUE);
+    return [$this->entityTypeId . ':' . $this->id()];
   }
 
   /**
    * {@inheritdoc}
+   */
+  public function getCacheMaxAge() {
+    return Cache::PERMANENT;
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * @return static|null
+   *   The entity object or NULL if there is no entity with the given ID.
    */
   public static function load($id) {
     $entity_manager = \Drupal::entityManager();
@@ -425,6 +471,10 @@ abstract class Entity implements EntityInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @return static[]
+   *   An array of entity objects indexed by their IDs. Returns an empty array
+   *   if no matching entities are found.
    */
   public static function loadMultiple(array $ids = NULL) {
     $entity_manager = \Drupal::entityManager();
@@ -433,30 +483,13 @@ abstract class Entity implements EntityInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @return static
+   *   The entity object.
    */
   public static function create(array $values = array()) {
     $entity_manager = \Drupal::entityManager();
     return $entity_manager->getStorage($entity_manager->getEntityTypeFromClass(get_called_class()))->create($values);
-  }
-
-
-  /**
-   * Acts on an entity after it was saved or deleted.
-   */
-  protected function onSaveOrDelete() {
-    $referenced_entities = array(
-      $this->getEntityTypeId() => array($this->id() => $this),
-    );
-
-    foreach ($this->referencedEntities() as $referenced_entity) {
-      $referenced_entities[$referenced_entity->getEntityTypeId()][$referenced_entity->id()] = $referenced_entity;
-    }
-
-    foreach ($referenced_entities as $entity_type => $entities) {
-      if ($this->entityManager()->hasHandler($entity_type, 'view_builder')) {
-        $this->entityManager()->getViewBuilder($entity_type)->resetCache($entities);
-      }
-    }
   }
 
   /**
@@ -470,11 +503,14 @@ abstract class Entity implements EntityInterface {
     // updated entity may start to appear in a listing because it now meets that
     // listing's filtering requirements. A newly created entity may start to
     // appear in listings because it did not exist before.)
-    $tags = $this->getListCacheTags();
+    $tags = $this->getEntityType()->getListCacheTags();
+    if ($this->hasLinkTemplate('canonical')) {
+      // Creating or updating an entity may change a cached 403 or 404 response.
+      $tags = Cache::mergeTags($tags, ['4xx-response']);
+    }
     if ($update) {
       // An existing entity was updated, also invalidate its unique cache tag.
-      $tags = NestedArray::mergeDeep($tags, $this->getCacheTag());
-      $this->onUpdateBundleEntity();
+      $tags = Cache::mergeTags($tags, $this->getCacheTags());
     }
     Cache::invalidateTags($tags);
   }
@@ -482,40 +518,22 @@ abstract class Entity implements EntityInterface {
   /**
    * Invalidates an entity's cache tags upon delete.
    *
+   * @param \Drupal\Core\Entity\EntityTypeInterface $entity_type
+   *   The entity type definition.
    * @param \Drupal\Core\Entity\EntityInterface[] $entities
    *   An array of entities.
    */
-  protected static function invalidateTagsOnDelete(array $entities) {
-    $tags = array();
+  protected static function invalidateTagsOnDelete(EntityTypeInterface $entity_type, array $entities) {
+    $tags = $entity_type->getListCacheTags();
     foreach ($entities as $entity) {
       // An entity was deleted: invalidate its own cache tag, but also its list
       // cache tags. (A deleted entity may cause changes in a paged list on
       // other pages than the one it's on. The one it's on is handled by its own
       // cache tag, but subsequent list pages would not be invalidated, hence we
       // must invalidate its list cache tags as well.)
-      $tags = NestedArray::mergeDeepArray(array($tags, $entity->getCacheTag(), $entity->getListCacheTags()));
-      $entity->onSaveOrDelete();
+      $tags = Cache::mergeTags($tags, $entity->getCacheTags());
     }
     Cache::invalidateTags($tags);
-  }
-
-  /**
-   * Acts on entities of which this entity is a bundle entity type.
-   */
-  protected function onUpdateBundleEntity() {
-    $bundle_of = $this->getEntityType()->getBundleOf();
-    if ($bundle_of !== FALSE) {
-      // If this entity is a bundle entity type of another entity type, and we're
-      // updating an existing entity, and that other entity type has a view
-      // builder class, then invalidate the render cache of entities for which
-      // this entity is a bundle.
-      $entity_manager = $this->entityManager();
-      if ($entity_manager->hasHandler($bundle_of, 'view_builder')) {
-        $entity_manager->getViewBuilder($bundle_of)->resetCache();
-      }
-      // Entity bundle field definitions may depend on bundle settings.
-      $entity_manager->clearCachedFieldDefinitions();
-    }
   }
 
   /**
@@ -545,6 +563,48 @@ abstract class Entity implements EntityInterface {
    */
   public function toArray() {
     return array();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getTypedData() {
+    if (!isset($this->typedData)) {
+      $class = \Drupal::typedDataManager()->getDefinition('entity')['class'];
+      $this->typedData = $class::createFromEntity($this);
+    }
+    return $this->typedData;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function __sleep() {
+    $this->typedData = NULL;
+    return $this->traitSleep();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getConfigDependencyKey() {
+    return $this->getEntityType()->getConfigDependencyKey();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getConfigDependencyName() {
+    return $this->getEntityTypeId() . ':' . $this->bundle() . ':' . $this->uuid();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getConfigTarget() {
+    // For content entities, use the UUID for the config target identifier.
+    // This ensures that references to the target can be deployed reliably.
+    return $this->uuid();
   }
 
 }

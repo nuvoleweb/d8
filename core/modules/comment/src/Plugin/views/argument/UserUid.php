@@ -7,7 +7,7 @@
 
 namespace Drupal\comment\Plugin\views\argument;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Database\Connection;
 use Drupal\views\Plugin\views\argument\ArgumentPluginBase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -62,10 +62,10 @@ class UserUid extends ArgumentPluginBase {
       $title = $this->database->query('SELECT name FROM {users_field_data} WHERE uid = :uid AND default_langcode = 1', array(':uid' => $this->argument))->fetchField();
     }
     if (empty($title)) {
-      return t('No user');
+      return $this->t('No user');
     }
 
-    return String::checkPlain($title);
+    return SafeMarkup::checkPlain($title);
   }
 
   protected function defaultActions($which = NULL) {
@@ -86,8 +86,8 @@ class UserUid extends ArgumentPluginBase {
     $this->ensureMyTable();
 
     // Use the table definition to correctly add this user ID condition.
-    if ($this->table != 'comment') {
-      $subselect = $this->database->select('comment', 'c');
+    if ($this->table != 'comment_field_data') {
+      $subselect = $this->database->select('comment_field_data', 'c');
       $subselect->addField('c', 'cid');
       $subselect->condition('c.uid', $this->argument);
 
@@ -108,7 +108,7 @@ class UserUid extends ArgumentPluginBase {
    * {@inheritdoc}
    */
   public function getSortName() {
-    return t('Numerical', array(), array('context' => 'Sort order'));
+    return $this->t('Numerical', array(), array('context' => 'Sort order'));
   }
 
 }

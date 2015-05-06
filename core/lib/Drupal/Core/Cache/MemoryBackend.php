@@ -17,7 +17,7 @@ namespace Drupal\Core\Cache;
  *
  * @ingroup cache
  */
-class MemoryBackend implements CacheBackendInterface {
+class MemoryBackend implements CacheBackendInterface, CacheTagsInvalidatorInterface {
 
   /**
    * Array to store cache objects.
@@ -94,7 +94,7 @@ class MemoryBackend implements CacheBackendInterface {
     $prepared->data = unserialize($prepared->data);
 
     // Check expire time.
-    $prepared->valid = $prepared->expire == Cache::PERMANENT || $prepared->expire >= REQUEST_TIME;
+    $prepared->valid = $prepared->expire == Cache::PERMANENT || $prepared->expire >= $this->getRequestTime();
 
     if (!$allow_invalid && !$prepared->valid) {
       return FALSE;
@@ -107,12 +107,16 @@ class MemoryBackend implements CacheBackendInterface {
    * Implements Drupal\Core\Cache\CacheBackendInterface::set().
    */
   public function set($cid, $data, $expire = Cache::PERMANENT, array $tags = array()) {
+    Cache::validateTags($tags);
+    $tags = array_unique($tags);
+    // Sort the cache tags so that they are stored consistently in the database.
+    sort($tags);
     $this->cache[$cid] = (object) array(
       'cid' => $cid,
       'data' => serialize($data),
-      'created' => REQUEST_TIME,
+      'created' => $this->getRequestTime(),
       'expire' => $expire,
-      'tags' => $this->flattenTags($tags),
+      'tags' => $tags,
     );
   }
 
@@ -140,18 +144,6 @@ class MemoryBackend implements CacheBackendInterface {
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::deleteTags().
-   */
-  public function deleteTags(array $tags) {
-    $flat_tags = $this->flattenTags($tags);
-    foreach ($this->cache as $cid => $item) {
-      if (array_intersect($flat_tags, $item->tags)) {
-        unset($this->cache[$cid]);
-      }
-    }
-  }
-
-  /**
    * Implements Drupal\Core\Cache\CacheBackendInterface::deleteAll().
    */
   public function deleteAll() {
@@ -163,7 +155,7 @@ class MemoryBackend implements CacheBackendInterface {
    */
   public function invalidate($cid) {
     if (isset($this->cache[$cid])) {
-      $this->cache[$cid]->expire = REQUEST_TIME - 1;
+      $this->cache[$cid]->expire = $this->getRequestTime() - 1;
     }
   }
 
@@ -172,18 +164,17 @@ class MemoryBackend implements CacheBackendInterface {
    */
   public function invalidateMultiple(array $cids) {
     foreach ($cids as $cid) {
-      $this->cache[$cid]->expire = REQUEST_TIME - 1;
+      $this->cache[$cid]->expire = $this->getRequestTime() - 1;
     }
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::invalidateTags().
+   * {@inheritdoc}
    */
   public function invalidateTags(array $tags) {
-    $flat_tags = $this->flattenTags($tags);
     foreach ($this->cache as $cid => $item) {
-      if (array_intersect($flat_tags, $item->tags)) {
-        $this->cache[$cid]->expire = REQUEST_TIME - 1;
+      if (array_intersect($tags, $item->tags)) {
+        $this->cache[$cid]->expire = $this->getRequestTime() - 1;
       }
     }
   }
@@ -193,36 +184,8 @@ class MemoryBackend implements CacheBackendInterface {
    */
   public function invalidateAll() {
     foreach ($this->cache as $cid => $item) {
-      $this->cache[$cid]->expire = REQUEST_TIME - 1;
+      $this->cache[$cid]->expire = $this->getRequestTime() - 1;
     }
-  }
-
-  /**
-   * 'Flattens' a tags array into an array of strings.
-   *
-   * @param array $tags
-   *   Associative array of tags to flatten.
-   *
-   * @return array
-   *   An indexed array of strings.
-   */
-  protected function flattenTags(array $tags) {
-    if (isset($tags[0])) {
-      return $tags;
-    }
-
-    $flat_tags = array();
-    foreach ($tags as $namespace => $values) {
-      if (is_array($values)) {
-        foreach ($values as $value) {
-          $flat_tags[] = "$namespace:$value";
-        }
-      }
-      else {
-        $flat_tags[] = "$namespace:$values";
-      }
-    }
-    return $flat_tags;
   }
 
   /**
@@ -234,6 +197,24 @@ class MemoryBackend implements CacheBackendInterface {
   /**
    * {@inheritdoc}
    */
-  public function removeBin() {}
+  public function removeBin() {
+    $this->cache = [];
+  }
+
+  /**
+   * Wrapper method for REQUEST_TIME constant.
+   *
+   * @return int
+   */
+  protected function getRequestTime() {
+    return defined('REQUEST_TIME') ? REQUEST_TIME : (int) $_SERVER['REQUEST_TIME'];
+  }
+
+  /**
+   * Prevents data stored in memory backends from being serialized.
+   */
+  public function __sleep() {
+    return [];
+  }
 
 }

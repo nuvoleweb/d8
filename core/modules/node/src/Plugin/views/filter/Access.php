@@ -47,4 +47,15 @@ class Access extends FilterPluginBase {
     }
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheContexts() {
+    $contexts = parent::getCacheContexts();
+
+    $contexts[] = 'user.node_grants:view';
+
+    return $contexts;
+  }
+
 }

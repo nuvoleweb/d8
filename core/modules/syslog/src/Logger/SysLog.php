@@ -9,17 +9,17 @@ namespace Drupal\syslog\Logger;
 
 use Drupal\Core\Config\ConfigFactory;
 use Drupal\Core\Logger\LogMessageParserInterface;
+use Drupal\Core\Logger\RfcLoggerTrait;
 use Psr\Log\LoggerInterface;
-use Psr\Log\LoggerTrait;
 
 /**
  * Redirects logging messages to syslog.
  */
 class SysLog implements LoggerInterface {
-  use LoggerTrait;
+  use RfcLoggerTrait;
 
   /**
-   * A configuration object containin syslog settings.
+   * A configuration object containing syslog settings.
    *
    * @var \Drupal\Core\Config\Config
    */

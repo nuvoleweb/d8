@@ -7,7 +7,7 @@
 
 namespace Drupal\views_ui\Form\Ajax;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\views_ui\ViewUI;
 use Drupal\views\ViewExecutable;
@@ -42,10 +42,11 @@ class RearrangeFilter extends ViewsFormBase {
     $types = ViewExecutable::getHandlerTypes();
     $executable = $view->getExecutable();
     if (!$executable->setDisplay($display_id)) {
-      views_ajax_render($this->t('Invalid display id @display', array('@display' => $display_id)));
+      $form['markup'] = array('#markup' => $this->t('Invalid display id @display', array('@display' => $display_id)));
+      return $form;
     }
     $display = $executable->displayHandlers->get($display_id);
-    $form['#title'] = String::checkPlain($display->display['display_title']) . ': ';
+    $form['#title'] = SafeMarkup::checkPlain($display->display['display_title']) . ': ';
     $form['#title'] .= $this->t('Rearrange @type', array('@type' => $types[$type]['ltitle']));
     $form['#section'] = $display_id . 'rearrange-item';
 

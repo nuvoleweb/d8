@@ -28,6 +28,9 @@ interface FieldItemInterface extends ComplexDataInterface {
   /**
    * Defines field item properties.
    *
+   * Properties that are required to constitute a valid, non-empty item should
+   * be denoted with \Drupal\Core\TypedData\DataDefinition::setRequired().
+   *
    * @return \Drupal\Core\TypedData\DataDefinitionInterface[]
    *   An array of property definitions of contained properties, keyed by
    *   property name.
@@ -55,7 +58,7 @@ interface FieldItemInterface extends ComplexDataInterface {
    *
    * This method is static because the field schema information is needed on
    * creation of the field. FieldItemInterface objects instantiated at that
-   * time are not reliable as field instance settings might be missing.
+   * time are not reliable as field settings might be missing.
    *
    * Computed fields having no schema should return an empty array.
    *
@@ -67,18 +70,20 @@ interface FieldItemInterface extends ComplexDataInterface {
    *   following key/value pairs:
    *   - columns: An array of Schema API column specifications, keyed by column
    *     name. The columns need to be a subset of the properties defined in
-   *     propertyDefinitions(). It is recommended to avoid having the column
-   *     definitions depend on field settings when possible. No assumptions
-   *     should be made on how storage engines internally use the original
-   *     column name to structure their storage.
+   *     propertyDefinitions(). The 'not null' property is ignored if present,
+   *     as it is determined automatically by the storage controller depending
+   *     on the table layout and the property definitions. It is recommended to
+   *     avoid having the column definitions depend on field settings when
+   *     possible. No assumptions should be made on how storage engines
+   *     internally use the original column name to structure their storage.
    *   - unique keys: (optional) An array of Schema API unique key definitions.
    *     Only columns that appear in the 'columns' array are allowed.
    *   - indexes: (optional) An array of Schema API index definitions. Only
    *     columns that appear in the 'columns' array are allowed. Those indexes
-   *     will be used as default indexes. Callers of field_create_field() can
-   *     specify additional indexes or, at their own risk, modify the default
-   *     indexes specified by the field-type module. Some storage engines might
-   *     not support indexes.
+   *     will be used as default indexes. Field definitions can specify
+   *     additional indexes or, at their own risk, modify the default indexes
+   *     specified by the field-type module. Some storage engines might not
+   *     support indexes.
    *   - foreign keys: (optional) An array of Schema API foreign key
    *     definitions. Note, however, that the field data is not necessarily
    *     stored in SQL. Also, the possible usage is limited, as you cannot
@@ -90,7 +95,7 @@ interface FieldItemInterface extends ComplexDataInterface {
   /**
    * Gets the entity that field belongs to.
    *
-   * @return \Drupal\Core\Entity\EntityInterface
+   * @return \Drupal\Core\Entity\FieldableEntityInterface
    *   The entity object.
    */
   public function getEntity();
@@ -231,20 +236,20 @@ interface FieldItemInterface extends ComplexDataInterface {
   public static function generateSampleValue(FieldDefinitionInterface $field_definition);
 
   /**
+   * Defines the storage-level settings for this plugin.
+   *
+   * @return array
+   *   A list of default settings, keyed by the setting name.
+   */
+  public static function defaultStorageSettings();
+
+  /**
    * Defines the field-level settings for this plugin.
    *
    * @return array
    *   A list of default settings, keyed by the setting name.
    */
-  public static function defaultSettings();
-
-  /**
-   * Defines the instance-level settings for this plugin.
-   *
-   * @return array
-   *   A list of default settings, keyed by the setting name.
-   */
-  public static function defaultInstanceSettings();
+  public static function defaultFieldSettings();
 
   /**
    * Returns a settings array that can be stored as a configuration value.
@@ -263,7 +268,7 @@ interface FieldItemInterface extends ComplexDataInterface {
    *
    * An example of a conversion between representations might be an
    * "allowed_values" setting that's structured by the field type as a
-   * \Drupal\Core\TypedData\AllowedValuesInterface::getPossibleOptions()
+   * \Drupal\Core\TypedData\OptionsProviderInterface::getPossibleOptions()
    * result (i.e., values as keys and labels as values). For such a use case,
    * in order to comply with the above, this method could convert that
    * representation to a numerically indexed array whose values are sub-arrays
@@ -278,12 +283,12 @@ interface FieldItemInterface extends ComplexDataInterface {
    *
    * @see \Drupal\Core\Config\Config::set()
    */
-  public static function settingsToConfigData(array $settings);
+  public static function storageSettingsToConfigData(array $settings);
 
   /**
    * Returns a settings array in the field type's canonical representation.
    *
-   * This function does the inverse of static::settingsToConfigData(). It's
+   * This function does the inverse of static::storageSettingsToConfigData(). It's
    * called when loading a field's settings from a configuration object.
    *
    * @param array $settings
@@ -293,58 +298,56 @@ interface FieldItemInterface extends ComplexDataInterface {
    *   The settings, in the representation expected by the field type and code
    *   that interacts with it.
    *
-   * @see \Drupal\Core\Field\FieldItemInterface::settingsToConfigData()
+   * @see \Drupal\Core\Field\FieldItemInterface::storageSettingsToConfigData()
    */
-  public static function settingsFromConfigData(array $settings);
+  public static function storageSettingsFromConfigData(array $settings);
 
   /**
    * Returns a settings array that can be stored as a configuration value.
    *
-   * Same as static::settingsToConfigData(), but for the field's instance
-   * settings.
+   * Same as static::storageSettingsToConfigData(), but for the field's settings.
    *
    * @param array $settings
-   *   The field's instance settings in the field type's canonical
-   *   representation.
+   *   The field's settings in the field type's canonical representation.
    *
    * @return array
    *   An array (either the unmodified $settings or a modified representation)
    *   that is suitable for storing as a deployable configuration value.
    *
-   * @see \Drupal\Core\Field\FieldItemInterface::settingsToConfigData()
+   * @see \Drupal\Core\Field\FieldItemInterface::storageSettingsToConfigData()
    */
-  public static function instanceSettingsToConfigData(array $settings);
+  public static function fieldSettingsToConfigData(array $settings);
 
   /**
    * Returns a settings array in the field type's canonical representation.
    *
-   * This function does the inverse of static::instanceSettingsToConfigData().
-   * It's called when loading a field's instance settings from a configuration
+   * This function does the inverse of static::fieldSettingsToConfigData().
+   * It's called when loading a field's settings from a configuration
    * object.
    *
    * @param array $settings
-   *   The field's instance settings, as it is stored within a configuration
+   *   The field's settings, as it is stored within a configuration
    *   object.
    *
    * @return array
-   *   The instance settings, in the representation expected by the field type
+   *   The field settings, in the representation expected by the field type
    *   and code that interacts with it.
    *
-   * @see \Drupal\Core\Field\FieldItemInterface::instanceSettingsToConfigData()
+   * @see \Drupal\Core\Field\FieldItemInterface::fieldSettingsToConfigData()
    */
-  public static function instanceSettingsFromConfigData(array $settings);
+  public static function fieldSettingsFromConfigData(array $settings);
 
   /**
-   * Returns a form for the field-level settings.
+   * Returns a form for the storage-level settings.
    *
-   * Invoked from \Drupal\field_ui\Form\FieldStorageEditForm to allow
-   * administrators to configure field-level settings.
+   * Invoked from \Drupal\field_ui\Form\FieldStorageConfigEditForm to allow
+   * administrators to configure storage-level settings.
    *
-   * Field storage might reject field definition changes that affect the field
-   * storage schema if the field already has data. When the $has_data parameter
-   * is TRUE, the form should not allow changing the settings that take part in
-   * the schema() method. It is recommended to set #access to FALSE on the
-   * corresponding elements.
+   * Field storage might reject settings changes that affect the field
+   * storage schema if the storage already has data. When the $has_data
+   * parameter is TRUE, the form should not allow changing the settings that
+   * take part in the schema() method. It is recommended to set #access to
+   * FALSE on the corresponding elements.
    *
    * @param array $form
    *   The form where the settings form is being included in.
@@ -356,13 +359,13 @@ interface FieldItemInterface extends ComplexDataInterface {
    * @return
    *   The form definition for the field settings.
    */
-  public function settingsForm(array &$form, FormStateInterface $form_state, $has_data);
+  public function storageSettingsForm(array &$form, FormStateInterface $form_state, $has_data);
 
   /**
-   * Returns a form for the instance-level settings.
+   * Returns a form for the field-level settings.
    *
-   * Invoked from \Drupal\field_ui\Form\FieldInstanceEditForm to allow
-   * administrators to configure instance-level settings.
+   * Invoked from \Drupal\field_ui\Form\FieldConfigEditForm to allow
+   * administrators to configure field-level settings.
    *
    * @param array $form
    *   The form where the settings form is being included in.
@@ -370,8 +373,52 @@ interface FieldItemInterface extends ComplexDataInterface {
    *   The form state of the (entire) configuration form.
    *
    * @return array
-   *   The form definition for the field instance settings.
+   *   The form definition for the field settings.
    */
-  public function instanceSettingsForm(array $form, FormStateInterface $form_state);
+  public function fieldSettingsForm(array $form, FormStateInterface $form_state);
+
+  /**
+   * Calculates dependencies for field items.
+   *
+   * Dependencies are saved in the field configuration entity and are used to
+   * determine configuration synchronization order. For example, if the field
+   * type's default value is a content entity, this method should return an
+   * array of dependencies listing the content entities.
+   *
+   * @param \Drupal\Core\Field\FieldDefinitionInterface $field_definition
+   *   The field definition.
+   *
+   * @return array
+   *   An array of dependencies grouped by type (config, content, module,
+   *   theme). For example:
+   *   @code
+   *   array(
+   *     'config' => array('user.role.anonymous', 'user.role.authenticated'),
+   *     'content' => array('node:article:f0a189e6-55fb-47fb-8005-5bef81c44d6d'),
+   *     'module' => array('node', 'user'),
+   *     'theme' => array('seven'),
+   *   );
+   *   @endcode
+   *
+   * @see \Drupal\Core\Config\Entity\ConfigDependencyManager
+   * @see \Drupal\Core\Config\Entity\ConfigEntityInterface::getConfigDependencyName()
+   */
+  public static function calculateDependencies(FieldDefinitionInterface $field_definition);
+
+  /**
+   * Informs the plugin that a dependency of the field will be deleted.
+   *
+   * @param \Drupal\Core\Field\FieldDefinitionInterface $field_definition
+   *   The field definition.
+   * @param array $dependencies
+   *   An array of dependencies that will be deleted keyed by dependency type.
+   *   Dependency types are, for example, entity, module and theme.
+   *
+   * @return bool
+   *   TRUE if the field definition has been changed as a result, FALSE if not.
+   *
+   * @see \Drupal\Core\Config\ConfigEntityInterface::onDependencyRemoval()
+   */
+  public static function onDependencyRemoval(FieldDefinitionInterface $field_definition, array $dependencies);
 
 }

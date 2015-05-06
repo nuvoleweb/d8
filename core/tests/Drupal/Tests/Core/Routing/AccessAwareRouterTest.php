@@ -7,14 +7,16 @@
 
 namespace Drupal\Tests\Core\Routing;
 
+use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Routing\AccessAwareRouter;
+use Drupal\Core\Routing\AccessAwareRouterInterface;
 use Drupal\Tests\UnitTestCase;
 use Symfony\Cmf\Component\Routing\RouteObjectInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Route;
 
 /**
- * @coversDefaultClass \Drupal\Core\Routing\Router
+ * @coversDefaultClass \Drupal\Core\Routing\AccessAwareRouter
  * @group Routing
  */
 class AccessAwareRouterTest extends UnitTestCase {
@@ -73,13 +75,18 @@ class AccessAwareRouterTest extends UnitTestCase {
   public function testMatchRequestAllowed() {
     $this->setupRouter();
     $request = new Request();
+    $access_result = AccessResult::allowed();
     $this->accessManager->expects($this->once())
       ->method('checkRequest')
       ->with($request)
-      ->will($this->returnValue(TRUE));
+      ->willReturn($access_result);
     $parameters = $this->router->matchRequest($request);
-    $this->assertSame($request->attributes->all(), array(RouteObjectInterface::ROUTE_OBJECT => $this->route));
-    $this->assertSame($parameters, array(RouteObjectInterface::ROUTE_OBJECT => $this->route));
+    $expected = [
+      RouteObjectInterface::ROUTE_OBJECT => $this->route,
+      AccessAwareRouterInterface::ACCESS_RESULT => $access_result,
+    ];
+    $this->assertSame($expected, $request->attributes->all());
+    $this->assertSame($expected, $parameters);
   }
 
   /**
@@ -90,11 +97,17 @@ class AccessAwareRouterTest extends UnitTestCase {
   public function testMatchRequestDenied() {
     $this->setupRouter();
     $request = new Request();
+    $access_result = AccessResult::forbidden();
     $this->accessManager->expects($this->once())
       ->method('checkRequest')
       ->with($request)
-      ->will($this->returnValue(FALSE));
-    $this->router->matchRequest($request);
+      ->willReturn($access_result);
+    $parameters = $this->router->matchRequest($request);
+    $expected = [
+      AccessAwareRouterInterface::ACCESS_RESULT => $access_result,
+    ];
+    $this->assertSame($expected, $request->attributes->all());
+    $this->assertSame($expected, $parameters);
   }
 
   /**

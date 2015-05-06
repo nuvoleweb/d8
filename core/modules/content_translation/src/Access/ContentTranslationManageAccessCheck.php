@@ -74,6 +74,10 @@ class ContentTranslationManageAccessCheck implements AccessInterface {
     /* @var \Drupal\Core\Entity\ContentEntityInterface $entity */
     if ($entity = $route_match->getParameter($entity_type_id)) {
 
+      if ($account->hasPermission('translate any entity')) {
+        return AccessResult::allowed()->cachePerPermissions();
+      }
+
       $operation = $route->getRequirement('_access_content_translation_manage');
 
       /* @var \Drupal\content_translation\ContentTranslationHandlerInterface $handler */
@@ -91,7 +95,7 @@ class ContentTranslationManageAccessCheck implements AccessInterface {
             && isset($languages[$source_language->getId()])
             && isset($languages[$target_language->getId()])
             && !isset($translations[$target_language->getId()]));
-          return AccessResult::allowedIf($is_new_translation)->cachePerRole()->cacheUntilEntityChanges($entity)
+          return AccessResult::allowedIf($is_new_translation)->cachePerPermissions()->cacheUntilEntityChanges($entity)
             ->andIf($handler->getTranslationAccess($entity, $operation));
 
         case 'update':
@@ -100,13 +104,13 @@ class ContentTranslationManageAccessCheck implements AccessInterface {
           $has_translation = isset($languages[$language->getId()])
             && $language->getId() != $entity->getUntranslated()->language()->getId()
             && isset($translations[$language->getId()]);
-          return AccessResult::allowedIf($has_translation)->cachePerRole()->cacheUntilEntityChanges($entity)
+          return AccessResult::allowedIf($has_translation)->cachePerPermissions()->cacheUntilEntityChanges($entity)
             ->andIf($handler->getTranslationAccess($entity, $operation));
       }
     }
 
     // No opinion.
-    return AccessResult::create();
+    return AccessResult::neutral();
   }
 
 }

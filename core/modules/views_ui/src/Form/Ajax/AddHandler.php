@@ -9,7 +9,7 @@ namespace Drupal\views_ui\Form\Ajax;
 
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\views\ViewExecutable;
-use Drupal\views\ViewStorageInterface;
+use Drupal\views\ViewEntityInterface;
 use Drupal\views\Views;
 
 /**
@@ -18,7 +18,7 @@ use Drupal\views\Views;
 class AddHandler extends ViewsFormBase {
 
   /**
-   * Constucts a new AddHandler object.
+   * Constructs a new AddHandler object.
    */
   public function __construct($type = NULL) {
     $this->setType($type);
@@ -34,7 +34,7 @@ class AddHandler extends ViewsFormBase {
   /**
    * {@inheritdoc}
    */
-  public function getForm(ViewStorageInterface $view, $display_id, $js, $type = NULL) {
+  public function getForm(ViewEntityInterface $view, $display_id, $js, $type = NULL) {
     $this->setType($type);
     return parent::getForm($view, $display_id, $js);
   }
@@ -62,7 +62,10 @@ class AddHandler extends ViewsFormBase {
     );
 
     $executable = $view->getExecutable();
-    $executable->setDisplay($display_id);
+    if (!$executable->setDisplay($display_id)) {
+      $form['markup'] = array('#markup' => $this->t('Invalid display id @display', array('@display' => $display_id)));
+      return $form;
+    }
     $display = &$executable->displayHandlers->get($display_id);
 
     $types = ViewExecutable::getHandlerTypes();
@@ -87,7 +90,7 @@ class AddHandler extends ViewsFormBase {
       $form['override']['controls'] = array(
         '#theme_wrappers' => array('container'),
         '#id' => 'views-filterable-options-controls',
-        '#attributes' => array('class' => array('container-inline')),
+        '#attributes' => ['class' => ['form--inline']],
       );
       $form['override']['controls']['options_search'] = array(
         '#type' => 'textfield',

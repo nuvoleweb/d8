@@ -7,9 +7,7 @@
 
 namespace Drupal\system\Plugin\Block;
 
-use Drupal\Component\Utility\NestedArray;
 use Drupal\Core\Block\BlockBase;
-use Drupal\Core\Cache\Cache;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Menu\MenuActiveTrailInterface;
 use Drupal\Core\Menu\MenuLinkTreeInterface;
@@ -84,7 +82,7 @@ class SystemMenuBlock extends BlockBase implements ContainerFactoryPluginInterfa
     $defaults = $this->defaultConfiguration();
     $form['menu_levels'] = array(
       '#type' => 'details',
-      '#title' => t('Menu levels'),
+      '#title' => $this->t('Menu levels'),
       // Open if not set to defaults.
       '#open' => $defaults['level'] !== $config['level'] || $defaults['depth'] !== $config['depth'],
       '#process' => [[get_class(), 'processMenuLevelParents']],
@@ -129,6 +127,14 @@ class SystemMenuBlock extends BlockBase implements ContainerFactoryPluginInterfa
   /**
    * {@inheritdoc}
    */
+  public function blockSubmit($form, FormStateInterface $form_state) {
+    $this->configuration['level'] = $form_state->getValue('level');
+    $this->configuration['depth'] = $form_state->getValue('depth');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function build() {
     $menu_name = $this->getDerivativeId();
     $parameters = $this->menuTree->getCurrentRouteMenuTreeParameters($menu_name);
@@ -158,28 +164,10 @@ class SystemMenuBlock extends BlockBase implements ContainerFactoryPluginInterfa
    * {@inheritdoc}
    */
   public function defaultConfiguration() {
-    // Modify the default max age for menu blocks: modifications made to menus,
-    // menu links and menu blocks will automatically invalidate corresponding
-    // cache tags, therefore allowing us to cache menu blocks forever. This is
-    // only not the case if there are user-specific or dynamic alterations (e.g.
-    // hook_node_access()), but in that:
-    // 1) it is possible to set a different max age for individual blocks, since
-    //    this is just the default value.
-    // 2) modules can modify caching by implementing hook_block_view_alter()
     return [
-      'cache' => array('max_age' => Cache::PERMANENT),
       'level' => 1,
       'depth' => 0,
     ];
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getCacheKeys() {
-    // Add a key for the active menu trail.
-    $menu = $this->getDerivativeId();
-    return array_merge(parent::getCacheKeys(), array($this->menuActiveTrail->getActiveTrailCacheKey($menu)));
   }
 
   /**
@@ -190,17 +178,21 @@ class SystemMenuBlock extends BlockBase implements ContainerFactoryPluginInterfa
     // the cache tag for this menu to be set: whenever the menu is changed, this
     // menu block must also be re-rendered for that user, because maybe a menu
     // link that is accessible for that user has been added.
-    $tags = array('menu' => array($this->getDerivativeId()));
-    return NestedArray::mergeDeep(parent::getCacheTags(), $tags);
+    $cache_tags = parent::getCacheTags();
+    $cache_tags[] = 'config:system.menu.' . $this->getDerivativeId();
+    return $cache_tags;
   }
 
   /**
    * {@inheritdoc}
    */
-  protected function getRequiredCacheContexts() {
-    // Menu blocks must be cached per role: different roles may have access to
-    // different menu links.
-    return array('cache_context.user.roles', 'cache_context.language');
+  public function getCacheContexts() {
+    // Menu blocks must be cached per role and per active trail.
+    $menu_name = $this->getDerivativeId();
+    return [
+      'user.roles',
+      'route.menu_active_trails:' . $menu_name,
+    ];
   }
 
 }

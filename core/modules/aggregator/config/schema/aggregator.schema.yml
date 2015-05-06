@@ -1,7 +1,7 @@
 # Schema for the configuration files of the aggregator module.
 
 aggregator.settings:
-  type: mapping
+  type: config_object
   label: 'Aggregator settings'
   mapping:
     fetcher:
@@ -14,8 +14,8 @@ aggregator.settings:
       type: sequence
       label: 'Processors'
       sequence:
-        - type: string
-          label: 'Processor'
+        type: string
+        label: 'Processor'
     items:
       type: mapping
       label: 'Items'

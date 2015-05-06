@@ -13,16 +13,17 @@ use Drupal\field\FieldStorageConfigInterface;
  * Views integration for image fields. Adds an image relationship to the default
  * field data.
  *
- * @see field_views_field_default_views_data()
+ * @see views_field_default_views_data()
  */
 function image_field_views_data(FieldStorageConfigInterface $field_storage) {
-  $data = field_views_field_default_views_data($field_storage);
+  $data = views_field_default_views_data($field_storage);
   foreach ($data as $table_name => $table_data) {
     // Add the relationship only on the target_id field.
     $data[$table_name][$field_storage->getName() . '_target_id']['relationship'] = array(
       'id' => 'standard',
       'base' => 'file_managed',
-      'base field' => 'target_id',
+      'entity type' => 'file',
+      'base field' => 'fid',
       'label' => t('image from !field_name', array('!field_name' => $field_storage->getName())),
     );
   }
@@ -44,19 +45,20 @@ function image_field_views_data_views_data_alter(array &$data, FieldStorageConfi
   /** @var \Drupal\Core\Entity\Sql\DefaultTableMapping $table_mapping */
   $table_mapping = $entity_manager->getStorage($entity_type_id)->getTableMapping();
 
-  list($label) = field_views_field_label($entity_type_id, $field_name);
+  list($label) = views_entity_field_label($entity_type_id, $field_name);
 
   $data['file_managed'][$pseudo_field_name]['relationship'] = array(
     'title' => t('@entity using @field', array('@entity' => $entity_type->getLabel(), '@field' => $label)),
+    'label' => t('@field_name', array('@field_name' => $field_name)),
     'help' => t('Relate each @entity with a @field set to the image.', array('@entity' => $entity_type->getLabel(), '@field' => $label)),
+    'group' => $entity_type->getLabel(),
     'id' => 'entity_reverse',
-    'field_name' => $field_name,
+    'base' => $entity_type->getDataTable() ?: $entity_type->getBaseTable(),
     'entity_type' => $entity_type_id,
+    'base field' => $entity_type->getKey('id'),
+    'field_name' => $field_name,
     'field table' => $table_mapping->getDedicatedDataTableName($field_storage),
     'field field' => $field_name . '_target_id',
-    'base' => $entity_type->getBaseTable(),
-    'base field' => $entity_type->getKey('id'),
-    'label' => t('!field_name', array('!field_name' => $field_name)),
     'join_extra' => array(
       0 => array(
         'field' => 'deleted',

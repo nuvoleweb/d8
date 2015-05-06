@@ -8,8 +8,7 @@
 namespace Drupal\Core\Menu;
 
 use Drupal\Component\Plugin\Exception\PluginException;
-use Drupal\Component\Utility\String;
-use Drupal\Core\Access\AccessResult;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Plugin\PluginBase;
 use Drupal\Core\Url;
 
@@ -77,7 +76,7 @@ abstract class MenuLinkBase extends PluginBase implements MenuLinkInterface {
    * {@inheritdoc}
    */
   public function isResettable() {
-    return AccessResult::forbidden();
+    return FALSE;
   }
 
   /**
@@ -141,9 +140,7 @@ abstract class MenuLinkBase extends PluginBase implements MenuLinkInterface {
       return new Url($this->pluginDefinition['route_name'], $this->pluginDefinition['route_parameters'], $options);
     }
     else {
-      $url = Url::createFromPath($this->pluginDefinition['url']);
-      $url->setOptions($options);
-      return $url;
+      return Url::fromUri($this->pluginDefinition['url'], $options);
     }
   }
 
@@ -179,7 +176,7 @@ abstract class MenuLinkBase extends PluginBase implements MenuLinkInterface {
    * {@inheritdoc}
    */
   public function deleteLink() {
-    throw new PluginException(String::format('Menu link plugin with ID @id does not support deletion', array('@id' => $this->getPluginId())));
+    throw new PluginException(SafeMarkup::format('Menu link plugin with ID @id does not support deletion', array('@id' => $this->getPluginId())));
   }
 
 }

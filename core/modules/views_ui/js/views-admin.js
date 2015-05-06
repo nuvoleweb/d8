@@ -233,7 +233,7 @@
   Drupal.behaviors.viewsUiRenderAddViewButton = {
     attach: function (context) {
       // Build the add display menu and pull the display input buttons into it.
-      var $menu = $(context).find('#views-display-menu-tabs').once('views-ui-render-add-view-button-processed');
+      var $menu = $(context).find('#views-display-menu-tabs').once('views-ui-render-add-view-button');
       if (!$menu.length) {
         return;
       }
@@ -241,7 +241,7 @@
       var $addDisplayDropdown = $('<li class="add"><a href="#"><span class="icon add"></span>' + Drupal.t('Add') + '</a><ul class="action-list" style="display:none;"></ul></li>');
       var $displayButtons = $menu.nextAll('input.add-display').detach();
       $displayButtons.appendTo($addDisplayDropdown.find('.action-list')).wrap('<li>')
-        .parent().first().addClass('first').end().last().addClass('last');
+        .parent().eq(0).addClass('first').end().eq(-1).addClass('last');
       // Remove the 'Add ' prefix from the button labels since they're being palced
       // in an 'Add' dropdown.
       // @todo This assumes English, but so does $addDisplayDropdown above. Add
@@ -335,10 +335,12 @@
      *   shown and hidden depending on the user's search terms.
      */
     getOptions: function ($allOptions) {
-      var i, $label, $description, $option;
+      var $label;
+      var $description;
+      var $option;
       var options = [];
       var length = $allOptions.length;
-      for (i = 0; i < length; i++) {
+      for (var i = 0; i < length; i++) {
         $option = $($allOptions[i]);
         $label = $option.find('label');
         $description = $option.find('div.description');
@@ -358,31 +360,39 @@
      * Keyup handler for the search box that hides or shows the relevant options.
      */
     handleKeyup: function (event) {
-      var found, i, j, option, search, words, wordsLength;
+      var found;
+      var option;
+      var zebraClass;
 
       // Determine the user's search query. The search text has been converted to
       // lowercase.
-      search = this.$searchBox.val().toLowerCase();
-      words = search.split(' ');
-      wordsLength = words.length;
+      var search = this.$searchBox.val().toLowerCase();
+      var words = search.split(' ');
+      var wordsLength = words.length;
+
+      // Start the counter for restriping rows.
+      var zebraCounter = 0;
 
       // Search through the search texts in the form for matching text.
       var length = this.options.length;
-      for (i = 0; i < length; i++) {
+      for (var i = 0; i < length; i++) {
         // Use a local variable for the option being searched, for performance.
         option = this.options[i];
         found = true;
         // Each word in the search string has to match the item in order for the
         // item to be shown.
-        for (j = 0; j < wordsLength; j++) {
+        for (var j = 0; j < wordsLength; j++) {
           if (option.searchText.indexOf(words[j]) === -1) {
             found = false;
           }
         }
         if (found) {
+          zebraClass = (zebraCounter % 2) ? 'odd' : 'even';
           // Show the checkbox row, and restripe it.
-          option.$div.show();
           option.$div.removeClass('even odd');
+          option.$div.addClass(zebraClass);
+          option.$div.show();
+          zebraCounter++;
         }
         else {
           // The search string wasn't found; hide this item.
@@ -395,7 +405,7 @@
   Drupal.behaviors.viewsUiPreview = {
     attach: function (context) {
       // Only act on the edit view form.
-      var $contextualFiltersBucket = $(context).find('.views-display-column .views-ui-display-tab-bucket.contextual-filters');
+      var $contextualFiltersBucket = $(context).find('.views-display-column .views-ui-display-tab-bucket.argument');
       if ($contextualFiltersBucket.length === 0) {
         return;
       }
@@ -516,7 +526,7 @@
           // When the link is clicked, dynamically click the corresponding form
           // button.
           .once('views-rearrange-filter-handler')
-          .on('click.views-rearrange-filter-handler', { buttonId: buttonId }, $.proxy(this, 'clickRemoveGroupButton'));
+          .on('click.views-rearrange-filter-handler', {buttonId: buttonId}, $.proxy(this, 'clickRemoveGroupButton'));
       }
     },
 
@@ -553,7 +563,9 @@
      * duplicate it between any subsequent groups.
      */
     duplicateGroupsOperator: function () {
-      var dropdowns, newRow, titleRow;
+      var dropdowns;
+      var newRow;
+      var titleRow;
 
       var titleRows = $('tr.views-group-title');
 
@@ -578,10 +590,10 @@
       newRow = $('<tr class="filter-group-operator-row"><td colspan="5"></td></tr>');
       newRow.find('td').append(this.operator);
       newRow.insertBefore(titleRow);
-      var i, length = titleRows.length;
+      var length = titleRows.length;
       // Starting with the third group, copy the operator to a new row above the
       // group title.
-      for (i = 2; i < length; i++) {
+      for (var i = 2; i < length; i++) {
         titleRow = $(titleRows[i]);
         // Make a copy of the operator dropdown and put it in a new table row.
         var fakeOperator = this.operator.clone();
@@ -695,7 +707,7 @@
         // Within the row, the operator labels are displayed inside the first table
         // cell (next to the filter name).
         var $draggableRow = $(this.draggableRows[i]);
-        var $firstCell = $draggableRow.find('td:first');
+        var $firstCell = $draggableRow.find('td').eq(0);
         if ($firstCell.length) {
           // The value of the operator label ("And" or "Or") is taken from the
           // first operator dropdown we encounter, going backwards from the current
@@ -735,10 +747,13 @@
      * Update the rowspan attribute of each cell containing an operator dropdown.
      */
     updateRowspans: function () {
-      var i, $row, $currentEmptyRow, draggableCount, $operatorCell;
+      var $row;
+      var $currentEmptyRow;
+      var draggableCount;
+      var $operatorCell;
       var rows = $(this.table).find('tr');
       var length = rows.length;
-      for (i = 0; i < length; i++) {
+      for (var i = 0; i < length; i++) {
         $row = $(rows[i]);
         if ($row.hasClass('views-group-title')) {
           // This row is a title row.
@@ -795,9 +810,7 @@
    */
   Drupal.behaviors.viewsRemoveIconClass = {
     attach: function (context) {
-      $(context).find('.dropbutton').once('dropbutton-icon', function () {
-        $(this).find('.icon').removeClass('icon');
-      });
+      $(context).find('.dropbutton').once('dropbutton-icon').find('.icon').removeClass('icon');
     }
   };
 
@@ -874,7 +887,7 @@
    */
   Drupal.behaviors.viewsUiOverrideSelect = {
     attach: function (context) {
-      $(context).find('#edit-override-dropdown').once('views-ui-override-button-text', function () {
+      $(context).find('#edit-override-dropdown').once('views-ui-override-button-text').each(function () {
         // Closures! :(
         var $context = $(context);
         var $submit = $context.find('[id^=edit-submit]');

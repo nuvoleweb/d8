@@ -8,7 +8,7 @@
 namespace Drupal\comment\Form;
 
 use Drupal\comment\CommentStorageInterface;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Form\ConfirmFormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
@@ -100,7 +100,7 @@ class ConfirmDeleteMultiple extends ConfirmFormBase {
         '#type' => 'hidden',
         '#value' => $cid,
         '#prefix' => '<li>',
-        '#suffix' => String::checkPlain($comment->label()) . '</li>'
+        '#suffix' => SafeMarkup::checkPlain($comment->label()) . '</li>'
       );
       $comment_counter++;
     }
@@ -122,7 +122,7 @@ class ConfirmDeleteMultiple extends ConfirmFormBase {
       $this->commentStorage->delete($this->comments);
       $count = count($form_state->getValue('comments'));
       $this->logger('content')->notice('Deleted @count comments.', array('@count' => $count));
-      drupal_set_message(format_plural($count, 'Deleted 1 comment.', 'Deleted @count comments.'));
+      drupal_set_message($this->formatPlural($count, 'Deleted 1 comment.', 'Deleted @count comments.'));
     }
     $form_state->setRedirectUrl($this->getCancelUrl());
   }

@@ -7,7 +7,7 @@
 
 namespace Drupal\Core\Field;
 
-use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\Access\AccessibleInterface;
@@ -94,6 +94,8 @@ interface FieldItemListInterface extends ListInterface, AccessibleInterface {
 
   /**
    * Filters out empty field items and re-numbers the item deltas.
+   *
+   * @return $this
    */
   public function filterEmptyItems();
 
@@ -192,7 +194,7 @@ interface FieldItemListInterface extends ListInterface, AccessibleInterface {
   /**
    * Returns a form for the default value input.
    *
-   * Invoked from \Drupal\field_ui\Form\FieldInstanceEditForm to allow
+   * Invoked from \Drupal\field_ui\Form\FieldConfigEditForm to allow
    * administrators to configure instance-level default value.
    *
    * @param array $form
@@ -201,14 +203,14 @@ interface FieldItemListInterface extends ListInterface, AccessibleInterface {
    *   The form state of the (entire) configuration form.
    *
    * @return array
-   *   The form definition for the field instance default value.
+   *   The form definition for the field default value.
    */
   public function defaultValuesForm(array &$form, FormStateInterface $form_state);
 
   /**
    * Validates the submitted default value.
    *
-   * Invoked from \Drupal\field_ui\Form\FieldInstanceEditForm to allow
+   * Invoked from \Drupal\field_ui\Form\FieldConfigEditForm to allow
    * administrators to configure instance-level default value.
    *
    * @param array $element
@@ -223,7 +225,7 @@ interface FieldItemListInterface extends ListInterface, AccessibleInterface {
   /**
    * Processes the submitted default value.
    *
-   * Invoked from \Drupal\field_ui\Form\FieldInstanceEditForm to allow
+   * Invoked from \Drupal\field_ui\Form\FieldConfigEditForm to allow
    * administrators to configure instance-level default value.
    *
    * @param array $element
@@ -234,7 +236,7 @@ interface FieldItemListInterface extends ListInterface, AccessibleInterface {
    *   The form state of the (entire) configuration form.
    *
    * @return array
-   *   The field instance default value.
+   *   The field default value.
    */
   public function defaultValuesFormSubmit(array $element, array &$form, FormStateInterface $form_state);
 
@@ -242,26 +244,31 @@ interface FieldItemListInterface extends ListInterface, AccessibleInterface {
    * Processes the default value before being applied.
    *
    * Defined or configured default values of a field might need some processing
-   * in order to be a valid value for the field type; e.g., a date field could
-   * process the defined value of 'NOW' to a valid date.
+   * in order to be a valid runtime value for the field type; e.g., a date field
+   * could process the defined value of 'NOW' to a valid date.
    *
-   * @param mixed
-   *   The default value as defined for the field.
-   * @param \Drupal\Core\Entity\ContentEntityInterface $entity
+   * @param array
+   *   The unprocessed default value defined for the field, as a numerically
+   *   indexed array of items, each item being an array of property/value pairs.
+   * @param \Drupal\Core\Entity\FieldableEntityInterface $entity
    *   The entity for which the default value is generated.
    * @param \Drupal\Core\Field\FieldDefinitionInterface $definition
    *   The definition of the field.
    *
-   * @return mixed
-   *   The default value for the field, as accepted by
-   *   \Drupal\field\Plugin\Core\Entity\FieldItemListInterface::setValue(). This
-   *   can be either:
-   *   - a literal, in which case it will be assigned to the first property of
-   *     the first item.
-   *   - a numerically indexed array of items, each item being a property/value
-   *     array.
-   *   - NULL or array() for no default value.
+   * @return array
+   *   The return default value for the field.
    */
-  public static function processDefaultValue($default_value, ContentEntityInterface $entity, FieldDefinitionInterface $definition);
+  public static function processDefaultValue($default_value, FieldableEntityInterface $entity, FieldDefinitionInterface $definition);
+
+  /**
+   * Determines equality to another object implementing FieldItemListInterface.
+   *
+   * @param \Drupal\Core\Field\FieldItemListInterface $list_to_compare
+   *   The field item list to compare to.
+   *
+   * @return bool
+   *   TRUE if the field item lists are equal, FALSE if not.
+   */
+  public function equals(FieldItemListInterface $list_to_compare);
 
 }

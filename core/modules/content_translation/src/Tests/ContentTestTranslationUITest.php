@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\entity\Tests\ContentTestTranslationUITest.
+ * Contains \Drupal\content_translation\Tests\ContentTestTranslationUITest.
  */
 
 namespace Drupal\content_translation\Tests;
@@ -35,17 +35,6 @@ class ContentTestTranslationUITest extends ContentTranslationUITest {
    */
   protected function getTranslatorPermissions() {
     return array_merge(parent::getTranslatorPermissions(), array('administer entity_test content'));
-  }
-
-  /**
-   * Overrides \Drupal\content_translation\Tests\ContentTranslationUITest::getNewEntityValues().
-   */
-  protected function getNewEntityValues($langcode) {
-    $user = $this->drupalCreateUser();
-    return array(
-      'name' => $this->randomMachineName(),
-      'user_id' => $user->id(),
-    ) + parent::getNewEntityValues($langcode);
   }
 
 }

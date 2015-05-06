@@ -42,7 +42,7 @@ abstract class MTimeProtectedFileStorageBase extends PhpStorageTestBase {
     $this->secret = $this->randomMachineName();
 
     $this->settings = array(
-      'directory' => sys_get_temp_dir() . '/php',
+      'directory' =>  $this->directory,
       'bin' => 'test',
       'secret' => $this->secret,
     );
@@ -50,6 +50,11 @@ abstract class MTimeProtectedFileStorageBase extends PhpStorageTestBase {
 
   /**
    * Tests basic load/save/delete operations.
+   *
+   * @covers ::load
+   * @covers ::save
+   * @covers ::delete
+   * @covers ::exists
    */
   public function testCRUD() {
     $php = new $this->storageClass($this->settings);
@@ -69,7 +74,7 @@ abstract class MTimeProtectedFileStorageBase extends PhpStorageTestBase {
     $php = new $this->storageClass($this->settings);
     $name = 'simpletest.php';
     $php->save($name, '<?php');
-    $expected_root_directory = sys_get_temp_dir() . '/php/test';
+    $expected_root_directory =  $this->directory . '/test';
     if (substr($name, -4) === '.php') {
       $expected_directory = $expected_root_directory . '/' . substr($name, 0, -4);
     }

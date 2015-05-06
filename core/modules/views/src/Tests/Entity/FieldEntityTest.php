@@ -7,7 +7,9 @@
 
 namespace Drupal\views\Tests\Entity;
 
+use Drupal\comment\Tests\CommentTestTrait;
 use Drupal\views\Tests\ViewTestBase;
+use Drupal\views\Tests\ViewTestData;
 use Drupal\views\Views;
 
 /**
@@ -16,6 +18,8 @@ use Drupal\views\Views;
  * @group views
  */
 class FieldEntityTest extends ViewTestBase {
+
+  use CommentTestTrait;
 
   /**
    * Views used by this test.
@@ -32,6 +36,18 @@ class FieldEntityTest extends ViewTestBase {
   public static $modules = array('node', 'comment');
 
   /**
+   * {@inheritdoc}
+   */
+  protected function setUp($import_test_views = TRUE) {
+    parent::setUp(FALSE);
+
+    $this->drupalCreateContentType(array('type' => 'page'));
+    $this->addDefaultCommentField('node', 'page');
+
+    ViewTestData::createTestViews(get_class($this), array('views_test_config'));
+  }
+
+  /**
    * Tests the getEntity method.
    */
   public function testGetEntity() {
@@ -40,10 +56,6 @@ class FieldEntityTest extends ViewTestBase {
 
     $account = entity_create('user', array('name' => $this->randomMachineName(), 'bundle' => 'user'));
     $account->save();
-    $this->drupalCreateContentType(array('type' => 'page'));
-    $this->container->get('comment.manager')->addDefaultField('node', 'page');
-    // Force a flush of the in-memory storage.
-    $this->container->get('views.views_data')->clear();
 
     $node = entity_create('node', array('uid' => $account->id(), 'type' => 'page'));
     $node->save();
@@ -54,6 +66,9 @@ class FieldEntityTest extends ViewTestBase {
       'field_name' => 'comment'
     ));
     $comment->save();
+
+    $user = $this->drupalCreateUser(['access comments']);
+    $this->drupalLogin($user);
 
     $view = Views::getView('test_field_get_entity');
     $this->executeView($view);

@@ -10,10 +10,7 @@ use Symfony\Component\HttpFoundation\Request;
 
 chdir('../../../..');
 
-$autoloader = require_once './core/vendor/autoload.php';
-
-// Set a global variable to indicate a mock HTTP request.
-$is_http_mock = !empty($_SERVER['HTTPS']);
+$autoloader = require_once 'autoload.php';
 
 // Change to HTTP.
 $_SERVER['HTTPS'] = NULL;
@@ -26,7 +23,6 @@ foreach ($_SERVER as &$value) {
 $request = Request::createFromGlobals();
 $kernel = TestKernel::createFromRequest($request, $autoloader, 'testing', TRUE);
 $response = $kernel
-  ->handlePageCache($request)
   ->handle($request)
     // Handle the response object.
     ->prepare($request)->send();

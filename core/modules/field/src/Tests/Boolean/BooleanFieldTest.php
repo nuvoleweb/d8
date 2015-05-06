@@ -7,8 +7,9 @@
 
 namespace Drupal\field\Tests\Boolean;
 
+use Drupal\Component\Utility\Unicode;
 use Drupal\field\Entity\FieldStorageConfig;
-use Drupal\field\Entity\FieldInstanceConfig;
+use Drupal\field\Entity\FieldConfig;
 use Drupal\simpletest\WebTestBase;
 
 /**
@@ -30,14 +31,14 @@ class BooleanFieldTest extends WebTestBase {
    *
    * @var \Drupal\field\Entity\FieldStorageConfig
    */
-  protected $field;
+  protected $fieldStorage;
 
   /**
-   * The instance used in this test class.
+   * The field used in this test class.
    *
-   * @var \Drupal\field\Entity\FieldInstanceConfig
+   * @var \Drupal\field\Entity\FieldConfig
    */
-  protected $instance;
+  protected $field;
 
   /**
    * {@inheritdoc}
@@ -45,13 +46,12 @@ class BooleanFieldTest extends WebTestBase {
   protected function setUp() {
     parent::setUp();
 
-    $this->web_user = $this->drupalCreateUser(array(
+    $this->drupalLogin($this->drupalCreateUser(array(
       'view test entity',
       'administer entity_test content',
       'administer entity_test form display',
       'administer entity_test fields',
-    ));
-    $this->drupalLogin($this->web_user);
+    )));
   }
 
   /**
@@ -63,25 +63,25 @@ class BooleanFieldTest extends WebTestBase {
     $label = $this->randomMachineName();
 
     // Create a field with settings to validate.
-    $field_name = drupal_strtolower($this->randomMachineName());
-    $this->field = FieldStorageConfig::create(array(
-      'name' => $field_name,
+    $field_name = Unicode::strtolower($this->randomMachineName());
+    $this->fieldStorage = FieldStorageConfig::create(array(
+      'field_name' => $field_name,
       'entity_type' => 'entity_test',
       'type' => 'boolean',
+    ));
+    $this->fieldStorage->save();
+    $this->field = FieldConfig::create(array(
+      'field_name' => $field_name,
+      'entity_type' => 'entity_test',
+      'bundle' => 'entity_test',
+      'label' => $label,
+      'required' => TRUE,
       'settings' => array(
         'on_label' => $on,
         'off_label' => $off,
       ),
     ));
     $this->field->save();
-    $this->instance = FieldInstanceConfig::create(array(
-      'field_name' => $field_name,
-      'entity_type' => 'entity_test',
-      'bundle' => 'entity_test',
-      'label' => $label,
-      'required' => TRUE,
-    ));
-    $this->instance->save();
 
     // Create a form display for the default form mode.
     entity_get_form_display('entity_test', 'entity_test', 'default')
@@ -103,8 +103,6 @@ class BooleanFieldTest extends WebTestBase {
 
     // Submit and ensure it is accepted.
     $edit = array(
-      'user_id' => 1,
-      'name' => $this->randomMachineName(),
       "{$field_name}[value]" => 1,
     );
     $this->drupalPostForm(NULL, $edit, t('Save'));
@@ -116,8 +114,18 @@ class BooleanFieldTest extends WebTestBase {
     $entity = entity_load('entity_test', $id);
     $display = entity_get_display($entity->getEntityTypeId(), $entity->bundle(), 'full');
     $content = $display->build($entity);
-    $this->drupalSetContent(drupal_render($content));
+    $this->setRawContent(drupal_render($content));
     $this->assertRaw('<div class="field-item">' . $on . '</div>');
+
+    // Test if we can change the on label.
+    $on = $this->randomMachineName();
+    $edit = array(
+      'settings[on_label]' => $on,
+    );
+    $this->drupalPostForm('entity_test/structure/entity_test/fields/entity_test.entity_test.' . $field_name, $edit, t('Save settings'));
+    // Check if we see the updated labels in the creation form.
+    $this->drupalGet('entity_test/add');
+    $this->assertRaw($on);
 
     // Test the display_label option.
     entity_get_form_display('entity_test', 'entity_test', 'default')
@@ -132,7 +140,7 @@ class BooleanFieldTest extends WebTestBase {
     $this->drupalGet('entity_test/add');
     $this->assertFieldByName("{$field_name}[value]", '', 'Widget found.');
     $this->assertNoRaw($on);
-    $this->assertText($this->instance->label());
+    $this->assertText($this->field->label());
 
     // Go to the form display page and check if the default settings works as
     // expected.
@@ -169,9 +177,9 @@ class BooleanFieldTest extends WebTestBase {
     );
 
     // Test the boolean field settings.
-    $this->drupalGet('entity_test/structure/entity_test/fields/entity_test.entity_test.' . $field_name . '/storage');
-    $this->assertFieldById('edit-field-settings-on-label', $on);
-    $this->assertFieldById('edit-field-settings-off-label', $off);
+    $this->drupalGet('entity_test/structure/entity_test/fields/entity_test.entity_test.' . $field_name);
+    $this->assertFieldById('edit-settings-on-label', $on);
+    $this->assertFieldById('edit-settings-off-label', $off);
   }
 
 }

@@ -5,7 +5,7 @@
  * Token integration for the views module.
  */
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 
 /**
  * Implements hook_token_info().
@@ -80,16 +80,17 @@ function views_tokens($type, $tokens, array $data = array(), array $options = ar
   $replacements = array();
 
   if ($type == 'view' && !empty($data['view'])) {
+    /** @var \Drupal\views\ViewExecutable $view */
     $view = $data['view'];
 
     foreach ($tokens as $name => $original) {
       switch ($name) {
         case 'label':
-          $replacements[$original] = $sanitize ? String::checkPlain($view->storage->label()) : $view->storage->label();
+          $replacements[$original] = $sanitize ? SafeMarkup::checkPlain($view->storage->label()) : $view->storage->label();
           break;
 
         case 'description':
-          $replacements[$original] = $sanitize ? String::checkPlain($view->storage->get('description')) : $view->storage->get('description');
+          $replacements[$original] = $sanitize ? SafeMarkup::checkPlain($view->storage->get('description')) : $view->storage->get('description');
           break;
 
         case 'id':
@@ -98,12 +99,12 @@ function views_tokens($type, $tokens, array $data = array(), array $options = ar
 
         case 'title':
           $title = $view->getTitle();
-          $replacements[$original] = $sanitize ? String::checkPlain($title) : $title;
+          $replacements[$original] = $sanitize ? SafeMarkup::checkPlain($title) : $title;
           break;
 
         case 'url':
-          if ($path = $view->getUrl()) {
-            $replacements[$original] = url($path, $url_options);
+          if ($url = $view->getUrl()) {
+            $replacements[$original] = $url->setOptions($url_options)->toString();
           }
           break;
         case 'base-table':
@@ -132,7 +133,7 @@ function views_tokens($type, $tokens, array $data = array(), array $options = ar
     // [view:url:*] nested tokens. This only works if Token module is installed.
     if ($url_tokens = $token_service->findWithPrefix($tokens, 'url')) {
       if ($path = $view->getUrl()) {
-        $replacements += $token_service->generate('url', $url_tokens, array('path' => $path), $options);
+        $replacements += $token_service->generate('url', $url_tokens, array('path' => $url->getInternalPath()), $options);
       }
     }
   }

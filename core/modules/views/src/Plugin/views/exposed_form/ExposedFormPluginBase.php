@@ -7,7 +7,7 @@
 
 namespace Drupal\views\Plugin\views\exposed_form;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Form\FormState;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\views\Form\ViewsExposedForm;
@@ -43,13 +43,13 @@ abstract class ExposedFormPluginBase extends PluginBase {
 
   protected function defineOptions() {
     $options = parent::defineOptions();
-    $options['submit_button'] = array('default' => 'Apply', 'translatable' => TRUE);
-    $options['reset_button'] = array('default' => FALSE, 'bool' => TRUE);
-    $options['reset_button_label'] = array('default' => 'Reset', 'translatable' => TRUE);
-    $options['exposed_sorts_label'] = array('default' => 'Sort by', 'translatable' => TRUE);
-    $options['expose_sort_order'] = array('default' => TRUE, 'bool' => TRUE);
-    $options['sort_asc_label'] = array('default' => 'Asc', 'translatable' => TRUE);
-    $options['sort_desc_label'] = array('default' => 'Desc', 'translatable' => TRUE);
+    $options['submit_button'] = array('default' => $this->t('Apply'));
+    $options['reset_button'] = array('default' => FALSE);
+    $options['reset_button_label'] = array('default' => $this->t('Reset'));
+    $options['exposed_sorts_label'] = array('default' => $this->t('Sort by'));
+    $options['expose_sort_order'] = array('default' => TRUE);
+    $options['sort_asc_label'] = array('default' => $this->t('Asc'));
+    $options['sort_desc_label'] = array('default' => $this->t('Desc'));
     return $options;
   }
 
@@ -57,21 +57,21 @@ abstract class ExposedFormPluginBase extends PluginBase {
     parent::buildOptionsForm($form, $form_state);
     $form['submit_button'] = array(
       '#type' => 'textfield',
-      '#title' => t('Submit button text'),
+      '#title' => $this->t('Submit button text'),
       '#default_value' => $this->options['submit_button'],
       '#required' => TRUE,
     );
 
     $form['reset_button'] = array(
       '#type' => 'checkbox',
-      '#title' => t('Include reset button (resets all applied exposed filters)'),
+      '#title' => $this->t('Include reset button (resets all applied exposed filters)'),
       '#default_value' => $this->options['reset_button'],
     );
 
     $form['reset_button_label'] = array(
      '#type' => 'textfield',
-      '#title' => t('Reset button label'),
-      '#description' => t('Text to display in the reset button of the exposed form.'),
+      '#title' => $this->t('Reset button label'),
+      '#description' => $this->t('Text to display in the reset button of the exposed form.'),
       '#default_value' => $this->options['reset_button_label'],
       '#required' => TRUE,
       '#states' => array(
@@ -83,21 +83,21 @@ abstract class ExposedFormPluginBase extends PluginBase {
 
     $form['exposed_sorts_label'] = array(
       '#type' => 'textfield',
-      '#title' => t('Exposed sorts label'),
+      '#title' => $this->t('Exposed sorts label'),
       '#default_value' => $this->options['exposed_sorts_label'],
       '#required' => TRUE,
     );
 
     $form['expose_sort_order'] = array(
       '#type' => 'checkbox',
-      '#title' => t('Allow people to choose the sort order'),
-      '#description' => t('If sort order is not exposed, the sort criteria settings for each sort will determine its order.'),
+      '#title' => $this->t('Allow people to choose the sort order'),
+      '#description' => $this->t('If sort order is not exposed, the sort criteria settings for each sort will determine its order.'),
       '#default_value' => $this->options['expose_sort_order'],
     );
 
     $form['sort_asc_label'] = array(
       '#type' => 'textfield',
-      '#title' => t('Label for ascending sort'),
+      '#title' => $this->t('Label for ascending sort'),
       '#default_value' => $this->options['sort_asc_label'],
       '#required' => TRUE,
       '#states' => array(
@@ -109,7 +109,7 @@ abstract class ExposedFormPluginBase extends PluginBase {
 
     $form['sort_desc_label'] = array(
       '#type' => 'textfield',
-      '#title' => t('Label for descending sort'),
+      '#title' => $this->t('Label for descending sort'),
       '#default_value' => $this->options['sort_desc_label'],
       '#required' => TRUE,
       '#states' => array(
@@ -150,7 +150,6 @@ abstract class ExposedFormPluginBase extends PluginBase {
       $form_state->set('ajax', TRUE);
     }
 
-    $form_state->set('exposed_form_plugin', $this);
     $form = \Drupal::formBuilder()->buildForm('\Drupal\views\Form\ViewsExposedForm', $form_state);
 
     if (!$this->view->display_handler->displaysExposed() || (!$block && $this->view->display_handler->getOption('exposed_block'))) {
@@ -211,7 +210,7 @@ abstract class ExposedFormPluginBase extends PluginBase {
     $exposed_sorts = array();
     foreach ($this->view->sort as $id => $handler) {
       if ($handler->canExpose() && $handler->isExposed()) {
-        $exposed_sorts[$id] = String::checkPlain($handler->options['expose']['label']);
+        $exposed_sorts[$id] = SafeMarkup::checkPlain($handler->options['expose']['label']);
       }
     }
 
@@ -244,7 +243,7 @@ abstract class ExposedFormPluginBase extends PluginBase {
         $form['sort_order'] = array(
           '#type' => 'select',
           '#options' => $sort_order,
-          '#title' => t('Order', array(), array('context' => 'Sort order')),
+          '#title' => $this->t('Order', array(), array('context' => 'Sort order')),
           '#default_value' => $default_sort_order,
         );
       }
@@ -267,7 +266,7 @@ abstract class ExposedFormPluginBase extends PluginBase {
       $all_exposed = array_merge($exposed_sorts, $exposed_filters);
 
       // Set the access to FALSE if there is no exposed input.
-      if (!array_intersect_key($all_exposed, $this->view->exposed_input)) {
+      if (!array_intersect_key($all_exposed, $this->view->getExposedInput())) {
         $form['actions']['reset']['#access'] = FALSE;
       }
     }
@@ -286,7 +285,7 @@ abstract class ExposedFormPluginBase extends PluginBase {
   }
 
   /**
-   * This function is executed when exposed form is submited.
+   * This function is executed when exposed form is submitted.
    *
    * @param $form
    *   Nested array of form elements that comprise the form.
@@ -327,6 +326,9 @@ abstract class ExposedFormPluginBase extends PluginBase {
       $form_state->setRebuild();
       $this->view->exposed_data = array();
     }
+
+    $form_state->setRedirect('<current>');
+    $form_state->setValues([]);
   }
 
 }

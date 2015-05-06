@@ -10,7 +10,6 @@ namespace Drupal\Tests\Core\Form;
 use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Form\FormCache;
 use Drupal\Core\Form\FormState;
-use Drupal\Core\Session\AccountInterface;
 use Drupal\Tests\UnitTestCase;
 
 /**
@@ -69,6 +68,27 @@ class FormCacheTest extends UnitTestCase {
   protected $formStateCacheStore;
 
   /**
+   * The logger channel.
+   *
+   * @var \Psr\Log\LoggerInterface|\PHPUnit_Framework_MockObject_MockObject
+   */
+  protected $logger;
+
+  /**
+   * The request stack.
+   *
+   * @var \Symfony\Component\HttpFoundation\RequestStack|\PHPUnit_Framework_MockObject_MockObject
+   */
+  protected $requestStack;
+
+  /**
+   * A policy rule determining the cacheability of a request.
+   *
+   * @var \Drupal\Core\PageCache\RequestPolicyInterface|\PHPUnit_Framework_MockObject_MockObject
+   */
+  protected $requestPolicy;
+
+  /**
    * {@inheritdoc}
    */
   protected function setUp() {
@@ -92,7 +112,12 @@ class FormCacheTest extends UnitTestCase {
       ->disableOriginalConstructor()
       ->getMock();
     $this->account = $this->getMock('Drupal\Core\Session\AccountInterface');
-    $this->formCache = new FormCache($this->keyValueExpirableFactory, $this->moduleHandler, $this->account, $this->csrfToken);
+
+    $this->logger = $this->getMock('Psr\Log\LoggerInterface');
+    $this->requestStack = $this->getMock('\Symfony\Component\HttpFoundation\RequestStack');
+    $this->requestPolicy = $this->getMock('\Drupal\Core\PageCache\RequestPolicyInterface');
+
+    $this->formCache = new FormCache($this->root, $this->keyValueExpirableFactory, $this->moduleHandler, $this->account, $this->csrfToken, $this->logger, $this->requestStack, $this->requestPolicy);
   }
 
   /**
@@ -210,6 +235,32 @@ class FormCacheTest extends UnitTestCase {
 
     $form = $this->formCache->getCache($form_build_id, $form_state);
     $this->assertNull($form);
+  }
+
+  /**
+   * @covers ::getCache
+   */
+  public function testGetCacheImmutableForm() {
+    $form_build_id = 'the_form_build_id';
+    $form_state = (new FormState())
+      ->addBuildInfo('immutable', TRUE);
+    $cached_form = [
+      '#build_id' => 'the_old_build_form_id',
+    ];
+
+    $this->account->expects($this->once())
+      ->method('isAnonymous')
+      ->willReturn(TRUE);
+    $this->formCacheStore->expects($this->once())
+      ->method('get')
+      ->with($form_build_id)
+      ->willReturn($cached_form);
+
+    $form = $this->formCache->getCache($form_build_id, $form_state);
+    $this->assertSame($cached_form['#build_id'], $form['#build_id_old']);
+    $this->assertNotSame($cached_form['#build_id'], $form['#build_id']);
+    $this->assertSame($form['#build_id'], $form['form_build_id']['#value']);
+    $this->assertSame($form['#build_id'], $form['form_build_id']['#id']);
   }
 
   /**
@@ -404,6 +455,43 @@ class FormCacheTest extends UnitTestCase {
       ->with($form_build_id, $form_state_data, $this->isType('int'));
 
     $this->formCache->setCache($form_build_id, $form, $form_state);
+  }
+
+  /**
+   * @covers ::setCache
+   */
+  public function testSetCacheBuildIdMismatch() {
+    $form_build_id = 'the_form_build_id';
+    $form = [
+      '#form_id' => 'the_form_id',
+      '#build_id' => 'stale_form_build_id',
+    ];
+    $form_state = new FormState();
+
+    $this->formCacheStore->expects($this->never())
+      ->method('setWithExpire');
+    $this->formStateCacheStore->expects($this->never())
+      ->method('setWithExpire');
+    $this->logger->expects($this->once())
+      ->method('error')
+      ->with('Form build-id mismatch detected while attempting to store a form in the cache.');
+    $this->formCache->setCache($form_build_id, $form, $form_state);
+  }
+
+
+  /**
+   * @covers ::deleteCache
+   */
+  public function testDeleteCache() {
+    $form_build_id = 'the_form_build_id';
+
+    $this->formCacheStore->expects($this->once())
+      ->method('delete')
+      ->with($form_build_id);
+    $this->formStateCacheStore->expects($this->once())
+      ->method('delete')
+      ->with($form_build_id);
+    $this->formCache->deleteCache($form_build_id);
   }
 
   /**

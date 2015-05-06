@@ -7,7 +7,6 @@
 
 use Drupal\Component\Utility\NestedArray;
 use Drupal\Component\Utility\SafeMarkup;
-use Drupal\Component\Utility\String;
 use Drupal\Component\Utility\UrlHelper;
 use Drupal\Component\Utility\Xss;
 use Drupal\Core\Database\Database;
@@ -15,128 +14,8 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Form\OptGroup;
 use Drupal\Core\Render\Element;
 use Drupal\Core\Template\Attribute;
+use Drupal\Core\Url;
 use Symfony\Component\HttpFoundation\RedirectResponse;
-
-/**
- * Fetches a form from the cache.
- *
- * @deprecated in Drupal 8.x-dev, will be removed before Drupal 8.0.
- *   Use \Drupal::formBuilder()->getCache().
- *
- * @see \Drupal\Core\Form\FormCacheInterface::getCache().
- */
-function form_get_cache($form_build_id, FormStateInterface $form_state) {
-  return \Drupal::formBuilder()->getCache($form_build_id, $form_state);
-}
-
-/**
- * Stores a form in the cache.
- *
- * @deprecated in Drupal 8.x-dev, will be removed before Drupal 8.0.
- *   Use \Drupal::formBuilder()->setCache().
- *
- * @see \Drupal\Core\Form\FormCacheInterface::setCache().
- */
-function form_set_cache($form_build_id, $form, FormStateInterface $form_state) {
-  \Drupal::formBuilder()->setCache($form_build_id, $form, $form_state);
-}
-
-/**
- * Retrieves, populates, and processes a form.
- *
- * @deprecated in Drupal 8.x-dev, will be removed before Drupal 8.0.
- *   Use \Drupal::formBuilder()->submitForm().
- *
- * @see \Drupal\Core\Form\FormBuilderInterface::submitForm().
- */
-function drupal_form_submit($form_arg, FormStateInterface $form_state) {
-  \Drupal::formBuilder()->submitForm($form_arg, $form_state);
-}
-
-/**
- * Processes a form submission.
- *
- * @deprecated in Drupal 8.x-dev, will be removed before Drupal 8.0.
- *   Use \Drupal::formBuilder()->processForm().
- *
- * @see \Drupal\Core\Form\FormBuilderInterface::processForm().
- */
-function drupal_process_form($form_id, &$form, FormStateInterface $form_state) {
-  \Drupal::formBuilder()->processForm($form_id, $form, $form_state);
-}
-
-/**
- * Executes custom validation and submission handlers for a given form.
- *
- * @deprecated in Drupal 8.x-dev, will be removed before Drupal 8.0.
- *   Use either \Drupal::service('form_submitter')->executeSubmitHandlers() or
- *   \Drupal::service('form_validator')->executeValidateHandlers().
- *
- * @see \Drupal\Core\Form\FormSubmitterInterface::executeSubmitHandlers()
- * @see \Drupal\Core\Form\FormValidatorInterface::executeValidateHandlers()
- */
-function form_execute_handlers($type, &$form, FormStateInterface $form_state) {
-  if ($type == 'submit') {
-    \Drupal::service('form_submitter')->executeSubmitHandlers($form, $form_state);
-  }
-  elseif ($type == 'validate') {
-    \Drupal::service('form_validator')->executeValidateHandlers($form, $form_state);
-  }
-}
-
-/**
- * Builds and processes all elements in the structured form array.
- *
- * @deprecated in Drupal 8.x-dev, will be removed before Drupal 8.0.
- *   Use \Drupal::formBuilder()->doBuildForm().
- *
- * @see \Drupal\Core\Form\FormBuilderInterface::doBuildForm().
- */
-function form_builder($form_id, &$element, FormStateInterface $form_state) {
-  return \Drupal::formBuilder()->doBuildForm($form_id, $element, $form_state);
-}
-
-/**
- * Removes internal Form API elements and buttons from submitted form values.
- *
- * @deprecated in Drupal 8.x-dev, will be removed before Drupal 8.0.0.
- *   Use $form_state->cleanValues().
- */
-function form_state_values_clean(FormStateInterface $form_state) {
-  $form_state->cleanValues();
-}
-
-/**
- * Changes submitted form values during form validation.
- *
- * @deprecated in Drupal 8.x-dev, will be removed before Drupal 8.0.
- *   Use $form_state->setValueForElement().
- *
- * @see \Drupal\Core\Form\FormStateInterface::setValueForElement().
- */
-function form_set_value($element, $value, FormStateInterface $form_state) {
-  $form_state->setValueForElement($element, $value);
-}
-
-/**
- * Allows PHP array processing of multiple select options with the same value.
- *
- * Used for form select elements which need to validate HTML option groups
- * and multiple options which may return the same value. Associative PHP arrays
- * cannot handle these structures, since they share a common key.
- *
- * @param $array
- *   The form options array to process.
- *
- * @return
- *   An array with all hierarchical elements flattened to a single array.
- *
- * @deprecated in Drupal 8.x-dev, will be removed before Drupal 8.0.
- *   Use \Drupal\Core\Form\OptGroup::flattenOptions().
- */
-function form_options_flatten($array) {
-  return OptGroup::flattenOptions($array);
-}
 
 /**
  * Prepares variables for select element templates.
@@ -217,7 +96,7 @@ function form_select_options($element, $choices = NULL) {
   $options = '';
   foreach ($choices as $key => $choice) {
     if (is_array($choice)) {
-      $options .= '<optgroup label="' . String::checkPlain($key) . '">';
+      $options .= '<optgroup label="' . SafeMarkup::checkPlain($key) . '">';
       $options .= form_select_options($element, $choice);
       $options .= '</optgroup>';
     }
@@ -233,7 +112,7 @@ function form_select_options($element, $choices = NULL) {
       else {
         $selected = '';
       }
-      $options .= '<option value="' . String::checkPlain($key) . '"' . $selected . '>' . String::checkPlain($choice) . '</option>';
+      $options .= '<option value="' . SafeMarkup::checkPlain($key) . '"' . $selected . '>' . SafeMarkup::checkPlain($choice) . '</option>';
     }
   }
   return SafeMarkup::set($options);
@@ -303,29 +182,21 @@ function form_get_options($element, $key) {
 function template_preprocess_fieldset(&$variables) {
   $element = $variables['element'];
   Element::setAttributes($element, array('id'));
-  Element\RenderElement::setAttributes($element, array('form-wrapper'));
+  Element\RenderElement::setAttributes($element);
   $variables['attributes'] = $element['#attributes'];
-  $variables['attributes']['class'][] = 'form-item';
   $variables['prefix'] = isset($element['#field_prefix']) ? $element['#field_prefix'] : NULL;
   $variables['suffix'] = isset($element['#field_suffix']) ? $element['#field_suffix'] : NULL;
+  $variables['title_display'] = isset($element['#title_display']) ? $element['#title_display'] : NULL;
   $variables['children'] = $element['#children'];
-  $legend_attributes = array();
-  if (isset($element['#title_display']) && $element['#title_display'] == 'invisible') {
-    $legend_attributes['class'][] = 'visually-hidden';
-  }
-  $variables['legend']['attributes'] = new Attribute($legend_attributes);
+  $variables['required'] = !empty($element['#required']) ? $element['#required'] : NULL;
+
   $variables['legend']['title'] = (isset($element['#title']) && $element['#title'] !== '') ? Xss::filterAdmin($element['#title']) : '';
-  $legend_span_attributes = array('class' => array('fieldset-legend'));
-  if (!empty($element['#required'])) {
-    $legend_span_attributes['class'][] = 'form-required';
-    $variables['legend_span']['attributes'] = new Attribute($legend_span_attributes);
-  }
+  $variables['legend']['attributes'] = new Attribute();
+  $variables['legend_span']['attributes'] = new Attribute();
+
   if (!empty($element['#description'])) {
     $description_id = $element['#attributes']['id'] . '--description';
-    $description_attributes = array(
-      'class' => 'description',
-      'id' => $description_id,
-    );
+    $description_attributes['id'] = $description_id;
     $variables['description']['attributes'] = new Attribute($description_attributes);
     $variables['description']['content'] = $element['#description'];
 
@@ -380,10 +251,6 @@ function template_preprocess_radios(&$variables) {
   if (isset($element['#id'])) {
     $variables['attributes']['id'] = $element['#id'];
   }
-  $variables['attributes']['class'][] = 'form-radios';
-  if (!empty($element['#attributes']['class'])) {
-    $variables['attributes']['class'] = array_merge($variables['attributes']['class'], $element['#attributes']['class']);
-  }
   if (isset($element['#attributes']['title'])) {
     $variables['attributes']['title'] = $element['#attributes']['title'];
   }
@@ -405,11 +272,6 @@ function template_preprocess_checkboxes(&$variables) {
   $variables['attributes'] = array();
   if (isset($element['#id'])) {
     $variables['attributes']['id'] = $element['#id'];
-  }
-  $variables['attributes']['class'] = array();
-  $variables['attributes']['class'][] = 'form-checkboxes';
-  if (!empty($element['#attributes']['class'])) {
-    $variables['attributes']['class'] = array_merge($variables['attributes']['class'], $element['#attributes']['class']);
   }
   if (isset($element['#attributes']['title'])) {
     $variables['attributes']['title'] = $element['#attributes']['title'];
@@ -487,18 +349,11 @@ function template_preprocess_textarea(&$variables) {
   $element = $variables['element'];
   Element::setAttributes($element, array('id', 'name', 'rows', 'cols', 'placeholder'));
   Element\RenderElement::setAttributes($element, array('form-textarea'));
-  $variables['wrapper_attributes'] = new Attribute(array(
-    'class' => array('form-textarea-wrapper'),
-  ));
-
-  // Add resizable behavior.
-  if (!empty($element['#resizable'])) {
-    $element['#attributes']['class'][] = 'resize-' . $element['#resizable'];
-  }
-
+  $variables['wrapper_attributes'] = new Attribute();
   $variables['attributes'] = new Attribute($element['#attributes']);
-
-  $variables['value'] = String::checkPlain($element['#value']);
+  $variables['value'] = SafeMarkup::checkPlain($element['#value']);
+  $variables['resizable'] = !empty($element['#resizable']) ? $element['#resizable'] : NULL;
+  $variables['required'] = !empty($element['#required']) ? $element['#required'] : NULL;
 }
 
 /**
@@ -506,14 +361,6 @@ function template_preprocess_textarea(&$variables) {
  * Prepares variables for form element templates.
  *
  * Default template: form-element.html.twig.
- *
- * Each form element is wrapped in a DIV container having the following CSS
- * classes:
- * - form-item: Generic for all form elements.
- * - form-type-#type: The internal element #type.
- * - form-item-#name: The internal form element #name (usually derived from the
- *   $form structure and set via form_builder()).
- * - form-disabled: Only set if the form element is #disabled.
  *
  * In addition to the element itself, the DIV contains a label for the element
  * based on the optional #title_display property, and an optional #description.
@@ -552,7 +399,8 @@ function template_preprocess_form_element(&$variables) {
   $element = &$variables['element'];
 
   // This function is invoked as theme wrapper, but the rendered form element
-  // may not necessarily have been processed by form_builder().
+  // may not necessarily have been processed by
+  // \Drupal::formBuilder()->doBuildForm().
   $element += array(
     '#title_display' => 'before',
   );
@@ -570,27 +418,23 @@ function template_preprocess_form_element(&$variables) {
     $variables['attributes']['id'] = $element['#id'];
   }
 
-  // Add element's #type and #name as class to aid with JS/CSS selectors.
-  $variables['attributes']['class'][] = 'form-item';
+  // Pass elements #type and #name to template.
   if (!empty($element['#type'])) {
-    $variables['attributes']['class'][] = 'form-type-' . strtr($element['#type'], '_', '-');
+    $variables['type'] = $element['#type'];
   }
   if (!empty($element['#name'])) {
-    $variables['attributes']['class'][] = 'form-item-' . strtr($element['#name'], array(' ' => '-', '_' => '-', '[' => '-', ']' => ''));
+    $variables['name'] = $element['#name'];
   }
-  // Add a class for disabled elements to facilitate cross-browser styling.
-  if (!empty($element['#attributes']['disabled'])) {
-    $variables['attributes']['class'][] = 'form-disabled';
-  }
+
+  // Pass elements disabled status to template.
+  $variables['disabled'] = !empty($element['#attributes']['disabled']) ? $element['#attributes']['disabled'] : NULL;
 
   // If #title is not set, we don't display any label.
   if (!isset($element['#title'])) {
     $element['#title_display'] = 'none';
   }
-  // If #title_dislay is not some of the visible options, add a CSS class.
-  if ($element['#title_display'] != 'before' && $element['#title_display'] != 'after') {
-    $variables['attributes']['class'][] = 'form-no-label';
-  }
+
+  $variables['title_display'] = $element['#title_display'];
 
   $variables['prefix'] = isset($element['#field_prefix']) ? $element['#field_prefix'] : NULL;
   $variables['suffix'] = isset($element['#field_suffix']) ? $element['#field_suffix'] : NULL;
@@ -598,10 +442,7 @@ function template_preprocess_form_element(&$variables) {
   $variables['description'] = NULL;
   if (!empty($element['#description'])) {
     $variables['description_display'] = $element['#description_display'];
-    $description_attributes = array('class' => array('description'));
-    if ($element['#description_display'] === 'invisible') {
-      $description_attributes['class'][] = 'visually-hidden';
-    }
+    $description_attributes = [];
     if (!empty($element['#id'])) {
       $description_attributes['id'] = $element['#id'] . '--description';
     }
@@ -622,7 +463,7 @@ function template_preprocess_form_element(&$variables) {
  *
  * Form element labels include the #title and a #required marker. The label is
  * associated with the element itself by the element #id. Labels may appear
- * before or after elements, depending on theme_form_element() and
+ * before or after elements, depending on form-element.html.twig and
  * #title_display.
  *
  * This function will not be called for elements with no labels, depending on
@@ -643,14 +484,9 @@ function template_preprocess_form_element_label(&$variables) {
   // If title and required marker are both empty, output no label.
   $variables['title'] = (isset($element['#title']) && $element['#title'] !== '') ? Xss::filterAdmin($element['#title']) : '';
   $variables['attributes'] = array();
-  // Style the label as class option to display inline with the element.
-  if ($element['#title_display'] == 'after') {
-    $variables['attributes']['class'][] = 'option';
-  }
-  // Show label only to screen readers to avoid disruption in visual flows.
-  elseif ($element['#title_display'] == 'invisible') {
-    $variables['attributes']['class'][] = 'visually-hidden';
-  }
+
+  // Pass elements title_display to template.
+  $variables['title_display'] = $element['#title_display'];
 
   // A #for property of a dedicated #type 'label' element as precedence.
   if (!empty($element['#for'])) {
@@ -666,13 +502,8 @@ function template_preprocess_form_element_label(&$variables) {
     $variables['attributes']['for'] = $element['#id'];
   }
 
-  // For required elements a 'form-required' class is appended to the
-  // label attributes.
-  $variables['required'] = FALSE;
-  if (!empty($element['#required'])) {
-    $variables['required'] = TRUE;
-    $variables['attributes']['class'][] = 'form-required';
-  }
+  // Pass elements required to template.
+  $variables['required'] = !empty($element['#required']) ? $element['#required'] : NULL;
 }
 
 /**
@@ -709,7 +540,7 @@ function template_preprocess_form_element_label(&$variables) {
  * Note: if the batch 'title', 'init_message', 'progress_message', or
  * 'error_message' could contain any user input, it is the responsibility of
  * the code calling batch_set() to sanitize them first with a function like
- * \Drupal\Component\Utility\String::checkPlain() or
+ * \Drupal\Component\Utility\SafeMarkup::checkPlain() or
  * \Drupal\Component\Utility\Xss::filter(). Furthermore, if the batch operation
  * returns any user input in the 'results' or 'message' keys of $context, it
  * must also sanitize them first.
@@ -736,8 +567,8 @@ function template_preprocess_form_element_label(&$variables) {
  *
  *   $nodes = entity_load_multiple_by_properties('node', array('uid' => $uid, 'type' => $type));
  *   $node = reset($nodes);
- *   $context['results'][] = $node->id() . ' : ' . String::checkPlain($node->label());
- *   $context['message'] = String::checkPlain($node->label());
+ *   $context['results'][] = $node->id() . ' : ' . SafeMarkup::checkPlain($node->label());
+ *   $context['message'] = SafeMarkup::checkPlain($node->label());
  * }
  *
  * // A more advanced example is a multi-step operation that loads all rows,
@@ -756,10 +587,10 @@ function template_preprocess_form_element_label(&$variables) {
  *     ->range(0, $limit)
  *     ->execute();
  *   foreach ($result as $row) {
- *     $context['results'][] = $row->id . ' : ' . String::checkPlain($row->title);
+ *     $context['results'][] = $row->id . ' : ' . SafeMarkup::checkPlain($row->title);
  *     $context['sandbox']['progress']++;
  *     $context['sandbox']['current_id'] = $row->id;
- *     $context['message'] = String::checkPlain($row->title);
+ *     $context['message'] = SafeMarkup::checkPlain($row->title);
  *   }
  *   if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
  *     $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
@@ -769,11 +600,11 @@ function template_preprocess_form_element_label(&$variables) {
  *
  * Sample callback_batch_finished():
  * @code
- * function batch_test_finished($success, $results, $operations) {
+ * function my_finished_callback($success, $results, $operations) {
  *   // The 'success' parameter means no fatal PHP errors were detected. All
  *   // other error management should be handled using 'results'.
  *   if ($success) {
- *     $message = format_plural(count($results), 'One post processed.', '@count posts processed.');
+ *     $message = \Drupal::translation()->formatPlural(count($results), 'One post processed.', '@count posts processed.');
  *   }
  *   else {
  *     $message = t('Finished with an error.');
@@ -838,6 +669,20 @@ function template_preprocess_form_element_label(&$variables) {
  *     the batch.
  *   - safe_strings: Internal use only. Used to store and retrieve strings
  *     marked as safe between requests.
+ *   - progressive: A Boolean that indicates whether or not the batch needs to
+ *     run progressively. TRUE indicates that the batch will run in more than
+ *     one run. FALSE (default) indicates that the batch will finish in a single
+ *     run.
+ *   - queue: An override of the default queue (with name and class fields
+ *     optional). An array containing two elements:
+ *     - name: Unique identifier for the queue.
+ *     - class: The name of a class that implements
+ *       \Drupal\Core\Queue\QueueInterface, including the full namespace but not
+ *       starting with a backslash. It must have a constructor with two
+ *       arguments: $name and a \Drupal\Core\Database\Connection object.
+ *       Typically, the class will either be \Drupal\Core\Queue\Batch or
+ *       \Drupal\Core\Queue\BatchMemory. Defaults to Batch if progressive is
+ *       TRUE, or to BatchMemory if progressive is FALSE.
  */
 function batch_set($batch_definition) {
   if ($batch_definition) {
@@ -901,9 +746,10 @@ function batch_set($batch_definition) {
  * This function is generally not needed in form submit handlers;
  * Form API takes care of batches that were set during form submission.
  *
- * @param $redirect
- *   (optional) Path to redirect to when the batch has finished processing.
- * @param $url
+ * @param \Drupal\Core\Url|string $redirect
+ *   (optional) Either path or Url object to redirect to when the batch has
+ *   finished processing.
+ * @param \Drupal\Core\Url $url
  *   (optional - should only be used for separate scripts like update.php)
  *   URL of the batch processing page.
  * @param $redirect_callback
@@ -913,7 +759,7 @@ function batch_set($batch_definition) {
  * @return \Symfony\Component\HttpFoundation\RedirectResponse|null
  *   A redirect response if the batch is progressive. No return value otherwise.
  */
-function batch_process($redirect = NULL, $url = 'batch', $redirect_callback = NULL) {
+function batch_process($redirect = NULL, Url $url = NULL, $redirect_callback = NULL) {
   $batch =& batch_get();
 
   if (isset($batch)) {
@@ -921,9 +767,8 @@ function batch_process($redirect = NULL, $url = 'batch', $redirect_callback = NU
     $process_info = array(
       'current_set' => 0,
       'progressive' => TRUE,
-      'url' => $url,
-      'url_options' => array(),
-      'source_url' => current_path(),
+      'url' => isset($url) ? $url : Url::fromRoute('system.batch_page.html'),
+      'source_url' => Url::fromRouteMatch(\Drupal::routeMatch()),
       'batch_redirect' => $redirect,
       'theme' => \Drupal::theme()->getActiveTheme()->getName(),
       'redirect_callback' => $redirect_callback,
@@ -949,7 +794,16 @@ function batch_process($redirect = NULL, $url = 'batch', $redirect_callback = NU
     if ($batch['progressive']) {
       // Now that we have a batch id, we can generate the redirection link in
       // the generic error message.
-      $batch['error_message'] = t('Please continue to <a href="@error_url">the error page</a>', array('@error_url' => url($url, array('query' => array('id' => $batch['id'], 'op' => 'finished')))));
+      /** @var \Drupal\Core\Url $batch_url */
+      $batch_url = $batch['url'];
+      /** @var \Drupal\Core\Url $error_url */
+      $error_url = clone $batch_url;
+      $query_options = $error_url->getOption('query');
+      $query_options['id'] = $batch['id'];
+      $query_options['op'] = 'finished';
+      $error_url->setOption('query', $query_options);
+
+      $batch['error_message'] = t('Please continue to <a href="@error_url">the error page</a>', array('@error_url' => $error_url->toString()));
 
       // Clear the way for the redirection to the batch processing page, by
       // saving and unsetting the 'destination', if there is any.
@@ -971,13 +825,15 @@ function batch_process($redirect = NULL, $url = 'batch', $redirect_callback = NU
       $_SESSION['batches'][$batch['id']] = TRUE;
 
       // Redirect for processing.
-      $options = array('query' => array('op' => 'start', 'id' => $batch['id']));
+      $query_options = $error_url->getOption('query');
+      $query_options['op'] = 'start';
+      $query_options['id'] = $batch['id'];
+      $batch_url->setOption('query', $query_options);
       if (($function = $batch['redirect_callback']) && function_exists($function)) {
-        $function($batch['url'], $options);
+        $function($batch_url->toString(), ['query' => $query_options]);
       }
       else {
-        $options['absolute'] = TRUE;
-        return new RedirectResponse(url($batch['url'], $options));
+        return new RedirectResponse($batch_url->setAbsolute()->toString());
       }
     }
     else {
@@ -1060,7 +916,7 @@ function _batch_queue($batch_set) {
     $class = $batch_set['queue']['class'];
 
     if (!isset($queues[$class][$name])) {
-      $queues[$class][$name] = new $class($name, Database::getConnection());
+      $queues[$class][$name] = new $class($name, \Drupal::database());
     }
     return $queues[$class][$name];
   }

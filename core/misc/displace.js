@@ -85,7 +85,8 @@
   function calculateOffset(edge) {
     var edgeOffset = 0;
     var displacingElements = document.querySelectorAll('[data-offset-' + edge + ']');
-    for (var i = 0, n = displacingElements.length; i < n; i++) {
+    var n = displacingElements.length;
+    for (var i = 0; i < n; i++) {
       var el = displacingElements[i];
       // If the element is not visible, do consider its dimensions.
       if (el.style.display === 'none') {
@@ -126,7 +127,7 @@
     var displacement = 0;
     var horizontal = (edge === 'left' || edge === 'right');
     // Get the offset of the element itself.
-    var placement = $el.offset()[ horizontal ? 'left' : 'top'];
+    var placement = $el.offset()[horizontal ? 'left' : 'top'];
     // Subtract scroll distance from placement to get the distance
     // to the edge of the viewport.
     placement -= window['scroll' + (horizontal ? 'X' : 'Y')] || document.documentElement['scroll' + (horizontal) ? 'Left' : 'Top'] || 0;

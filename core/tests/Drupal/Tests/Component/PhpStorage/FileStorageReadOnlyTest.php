@@ -12,6 +12,8 @@ use Drupal\Component\PhpStorage\FileReadOnlyStorage;
 
 /**
  * @coversDefaultClass \Drupal\Component\PhpStorage\FileReadOnlyStorage
+ *
+ * @group Drupal
  * @group PhpStorage
  */
 class FileStorageReadOnlyTest extends PhpStorageTestBase {
@@ -36,14 +38,12 @@ class FileStorageReadOnlyTest extends PhpStorageTestBase {
   protected function setUp() {
     parent::setUp();
 
-    $dir_path = sys_get_temp_dir() . '/php';
-
     $this->standardSettings = array(
-      'directory' => $dir_path,
+      'directory' => $this->directory,
       'bin' => 'test',
     );
     $this->readonlyStorage = array(
-      'directory' => $dir_path,
+      'directory' => $this->directory,
       // Let this read from the bin where the other instance is writing.
       'bin' => 'test',
     );
@@ -51,9 +51,6 @@ class FileStorageReadOnlyTest extends PhpStorageTestBase {
 
   /**
    * Tests writing with one class and reading with another.
-   *
-   * @group Drupal
-   * @group PhpStorage
    */
   public function testReadOnly() {
     $php = new FileStorage($this->standardSettings);
@@ -81,10 +78,7 @@ class FileStorageReadOnlyTest extends PhpStorageTestBase {
   }
 
   /**
-   * Tests writeable() method.
-   *
-   * @group Drupal
-   * @group PhpStorage
+   * @covers ::writeable
    */
   public function testWriteable() {
     $php_read = new FileReadOnlyStorage($this->readonlyStorage);
@@ -92,17 +86,26 @@ class FileStorageReadOnlyTest extends PhpStorageTestBase {
   }
 
   /**
-   * Tests deleteAll() method.
-   *
-   * @group Drupal
-   * @group PhpStorage
+   * @covers ::deleteAll
    */
   public function testDeleteAll() {
+    $php = new FileStorage($this->standardSettings);
+    $name = $this->randomMachineName() . '/' . $this->randomMachineName() . '.php';
+
+    // Find a global that doesn't exist.
+    do {
+      $random = mt_rand(10000, 100000);
+    } while (isset($GLOBALS[$random]));
+
+    // Write our the file so we can test deleting.
+    $code = "<?php\n\$GLOBALS[$random] = TRUE;";
+    $this->assertTrue($php->save($name, $code));
+
     $php_read = new FileReadOnlyStorage($this->readonlyStorage);
     $this->assertFalse($php_read->deleteAll());
 
     // Make sure directory exists prior to removal.
-    $this->assertTrue(file_exists(sys_get_temp_dir() . '/php/test'), 'File storage directory does not exist.');
+    $this->assertTrue(file_exists($this->directory . '/test'), 'File storage directory does not exist.');
   }
 
 }

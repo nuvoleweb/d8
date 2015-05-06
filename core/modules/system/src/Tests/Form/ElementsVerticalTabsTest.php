@@ -7,7 +7,9 @@
 
 namespace Drupal\system\Tests\Form;
 
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\simpletest\WebTestBase;
+use Drupal\Component\Serialization\Json;
 
 /**
  * Tests the vertical_tabs form element for expected behavior.
@@ -23,12 +25,26 @@ class ElementsVerticalTabsTest extends WebTestBase {
    */
   public static $modules = array('form_test');
 
+  /**
+   * A user with permission to access vertical_tab_test_tabs.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $adminUser;
+
+  /**
+   * A normal user.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $webUser;
+
   protected function setUp() {
     parent::setUp();
 
-    $this->admin_user = $this->drupalCreateUser(array('access vertical_tab_test tabs'));
-    $this->web_user = $this->drupalCreateUser();
-    $this->drupalLogin($this->admin_user);
+    $this->adminUser = $this->drupalCreateUser(array('access vertical_tab_test tabs'));
+    $this->webUser = $this->drupalCreateUser();
+    $this->drupalLogin($this->adminUser);
   }
 
   /**
@@ -53,9 +69,25 @@ class ElementsVerticalTabsTest extends WebTestBase {
     $this->assertTrue(isset($wrapper[0]), 'Vertical tab panes found.');
 
     // Test wrapper markup not present for non-privileged web user.
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
     $this->drupalGet('form_test/vertical-tabs');
     $wrapper = $this->xpath("//div[@data-vertical-tabs-panes]");
     $this->assertFalse(isset($wrapper[0]), 'Vertical tab wrappers are not displayed to unprivileged users.');
+  }
+
+ /**
+  * Ensures that default vertical tab is correctly selected.
+  */
+  function testDefaultTab() {
+    $this->drupalGet('form_test/vertical-tabs');
+    $this->assertFieldByName('vertical_tabs__active_tab', 'edit-tab3', t('The default vertical tab is correctly selected.'));
+  }
+
+  /**
+   * Ensures that vertical tab form values are cleaned.
+   */
+  function testDefaultTabCleaned() {
+    $values = Json::decode($this->drupalPostForm('form_test/form-state-values-clean', [], t('Submit')));
+    $this->assertFalse(isset($values['vertical_tabs__active_tab']), SafeMarkup::format('%element was removed.', ['%element' => 'vertical_tabs__active_tab']));
   }
 }

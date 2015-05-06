@@ -9,8 +9,8 @@ namespace Drupal\file\Plugin\views\argument;
 
 use Drupal\Core\Entity\EntityManagerInterface;
 use Drupal\Core\Entity\Query\QueryFactory;
-use Drupal\views\Plugin\views\argument\Numeric;
-use Drupal\Component\Utility\String;
+use Drupal\views\Plugin\views\argument\NumericArgument;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -21,7 +21,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  *
  * @ViewsArgument("file_fid")
  */
-class Fid extends Numeric implements ContainerFactoryPluginInterface {
+class Fid extends NumericArgument implements ContainerFactoryPluginInterface {
 
   /**
    * The entity manager service
@@ -75,13 +75,13 @@ class Fid extends Numeric implements ContainerFactoryPluginInterface {
    */
   public function titleQuery() {
     $fids = $this->entityQuery->get('file')
-      ->condition('fid', $this->value)
+      ->condition('fid', $this->value, 'IN')
       ->execute();
     $controller = $this->entityManager->getStorage('file');
     $files = $controller->loadMultiple($fids);
     $titles = array();
     foreach ($files as $file) {
-      $titles[] = String::checkPlain($file->getFilename());
+      $titles[] = SafeMarkup::checkPlain($file->getFilename());
     }
     return $titles;
   }

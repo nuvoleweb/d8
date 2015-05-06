@@ -7,7 +7,8 @@
 
 namespace Drupal\user\Plugin\views\access;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
+use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\user\PermissionHandlerInterface;
@@ -41,6 +42,13 @@ class Permission extends AccessPluginBase {
   protected $permissionHandler;
 
   /**
+   * The module handler.
+   *
+   * @var \Drupal\Core\Extension\ModuleHandlerInterface
+   */
+  protected $moduleHandler;
+
+  /**
    * Constructs a Permission object.
    *
    * @param array $configuration
@@ -51,9 +59,13 @@ class Permission extends AccessPluginBase {
    *   The plugin implementation definition.
    * @param \Drupal\user\PermissionHandlerInterface $permission_handler
    *   The permission handler.
+   * @param \Drupal\Core\Extension\ModuleHandlerInterface $module_handler
+   *   The module handler.
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, PermissionHandlerInterface $permission_handler) {
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, PermissionHandlerInterface $permission_handler, ModuleHandlerInterface $module_handler) {
+    parent::__construct($configuration, $plugin_id, $plugin_definition);
     $this->permissionHandler = $permission_handler;
+    $this->moduleHandler = $module_handler;
   }
 
   /**
@@ -64,7 +76,8 @@ class Permission extends AccessPluginBase {
       $configuration,
       $plugin_id,
       $plugin_definition,
-      $container->get('user.permissions')
+      $container->get('user.permissions'),
+      $container->get('module_handler')
     );
   }
 
@@ -72,7 +85,7 @@ class Permission extends AccessPluginBase {
    * {@inheritdoc}
    */
   public function access(AccountInterface $account) {
-    return $account->hasPermission($this->options['perm']) || $account->hasPermission('access all views');
+    return $account->hasPermission($this->options['perm']);
   }
 
   /**
@@ -88,7 +101,7 @@ class Permission extends AccessPluginBase {
       return $permissions[$this->options['perm']]['title'];
     }
 
-    return t($this->options['perm']);
+    return $this->t($this->options['perm']);
   }
 
 
@@ -101,23 +114,21 @@ class Permission extends AccessPluginBase {
 
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     parent::buildOptionsForm($form, $form_state);
-    $module_info = system_get_info('module');
-
     // Get list of permissions
     $perms = [];
     $permissions = $this->permissionHandler->getPermissions();
     foreach ($permissions as $perm => $perm_item) {
       $provider = $perm_item['provider'];
-      $display_name = $module_info[$provider]['name'];
-      $perms[$display_name][$perm] = String::checkPlain(strip_tags($perm_item['title']));
+      $display_name = $this->moduleHandler->getName($provider);
+      $perms[$display_name][$perm] = SafeMarkup::checkPlain(strip_tags($perm_item['title']));
     }
 
     $form['perm'] = array(
       '#type' => 'select',
       '#options' => $perms,
-      '#title' => t('Permission'),
+      '#title' => $this->t('Permission'),
       '#default_value' => $this->options['perm'],
-      '#description' => t('Only users with the selected permission flag will be able to access this display. Note that users with "access all views" can see any view, regardless of other permissions.'),
+      '#description' => $this->t('Only users with the selected permission flag will be able to access this display.'),
     );
   }
 

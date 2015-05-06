@@ -31,10 +31,10 @@ class LocaleLocaleLookupTest extends WebTestBase {
     parent::setUp();
 
     // Change the language default object to different values.
-    $language = ConfigurableLanguage::createFromLangcode('fr');
-    $language->set('default', TRUE);
-    $language->save();
-    $this->drupalLogin($this->root_user);
+    ConfigurableLanguage::createFromLangcode('fr')->save();
+    $this->config('system.site')->set('default_langcode', 'fr')->save();
+
+    $this->drupalLogin($this->rootUser);
   }
 
   /**

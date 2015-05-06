@@ -54,6 +54,15 @@ class FieldType extends DataType {
   public $description;
 
   /**
+   * The category under which the field type should be listed in the UI.
+   *
+   * @ingroup plugin_translatable
+   *
+   * @var \Drupal\Core\Annotation\Translation
+   */
+  public $category = '';
+
+  /**
    * The plugin_id of the default widget for this field type.
    *
    * This widget must be available whenever the field type is available (i.e.
@@ -78,7 +87,7 @@ class FieldType extends DataType {
   /**
    * A boolean stating that fields of this type cannot be created through the UI.
    *
-   * @var boolean
+   * @var bool
    */
   public $no_ui = FALSE;
 

@@ -7,17 +7,18 @@
 
 namespace Drupal\views\Plugin;
 
-use Drupal\Component\Plugin\Exception\PluginException;
+use Drupal\Component\Plugin\FallbackPluginManagerInterface;
 use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Plugin\DefaultPluginManager;
 use Drupal\views\ViewsData;
 use Symfony\Component\DependencyInjection\Container;
+use Drupal\views\Plugin\views\HandlerBase;
 
 /**
  * Plugin type manager for all views handlers.
  */
-class ViewsHandlerManager extends DefaultPluginManager {
+class ViewsHandlerManager extends DefaultPluginManager implements FallbackPluginManagerInterface {
 
   /**
    * The views data cache.
@@ -58,7 +59,8 @@ class ViewsHandlerManager extends DefaultPluginManager {
     }
     parent::__construct("Plugin/views/$handler_type", $namespaces, $module_handler, $plugin_interface, $plugin_definition_annotation_name);
 
-    $this->setCacheBackend($cache_backend, "views:$handler_type", array('extension' => array(TRUE, 'views')));
+    $this->setCacheBackend($cache_backend, "views:$handler_type");
+    $this->alterInfo('views_plugins_' . $handler_type);
 
     $this->viewsData = $views_data;
     $this->handlerType = $handler_type;
@@ -89,7 +91,7 @@ class ViewsHandlerManager extends DefaultPluginManager {
 
     if (isset($data[$field][$this->handlerType])) {
       $definition = $data[$field][$this->handlerType];
-      foreach (array('group', 'title', 'title short', 'help', 'real field', 'real table') as $key) {
+      foreach (array('group', 'title', 'title short', 'help', 'real field', 'real table', 'entity type', 'entity field') as $key) {
         if (!isset($definition[$key])) {
           // First check the field level.
           if (!empty($data[$field][$key])) {
@@ -97,7 +99,8 @@ class ViewsHandlerManager extends DefaultPluginManager {
           }
           // Then if that doesn't work, check the table level.
           elseif (!empty($data['table'][$key])) {
-            $definition[$key] = $data['table'][$key];
+            $definition_key = $key === 'entity type' ? 'entity_type' : $key;
+            $definition[$definition_key] = $data['table'][$key];
           }
         }
       }
@@ -105,18 +108,11 @@ class ViewsHandlerManager extends DefaultPluginManager {
       // @todo This is crazy. Find a way to remove the override functionality.
       $plugin_id = $override ? : $definition['id'];
       // Try to use the overridden handler.
-      try {
-        return $this->createInstance($plugin_id, $definition);
+      $handler = $this->createInstance($plugin_id, $definition);
+      if ($override && method_exists($handler, 'broken') && $handler->broken()) {
+        $handler = $this->createInstance($definition['id'], $definition);
       }
-      catch (PluginException $e) {
-        // If that fails, use the original handler.
-        try {
-          return $this->createInstance($definition['id'], $definition);
-        }
-        catch (PluginException $e) {
-          // Deliberately empty, this case is handled generically below.
-        }
-      }
+      return $handler;
     }
 
     // Finally, use the 'broken' handler.
@@ -135,4 +131,10 @@ class ViewsHandlerManager extends DefaultPluginManager {
     return $instance;
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function getFallbackPluginId($plugin_id, array $configuration = array()) {
+    return 'broken';
+  }
 }

@@ -7,7 +7,7 @@
 
 namespace Drupal\config_translation\Tests;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\language\Entity\ConfigurableLanguage;
 use Drupal\simpletest\WebTestBase;
 
@@ -84,7 +84,7 @@ class ConfigTranslationOverviewTest extends WebTestBase {
       $base_url = 'admin/structure/config_test/manage/' . $test_entity->id();
       $this->drupalGet('admin/config/regional/config-translation/config_test');
       $this->assertLinkByHref($base_url . '/translate');
-      $this->assertText(String::checkPlain($test_entity->label()));
+      $this->assertText(SafeMarkup::checkPlain($test_entity->label()));
 
       $entity_type = \Drupal::entityManager()->getDefinition($test_entity->getEntityTypeId());
       $this->drupalGet($base_url . '/translate');
@@ -118,6 +118,29 @@ class ConfigTranslationOverviewTest extends WebTestBase {
     $this->assertLinkByHref('admin/config/regional/date-time/formats/manage/html_date/translate');
     $this->assertText('HTML Year');
     $this->assertLinkByHref('admin/config/regional/date-time/formats/manage/html_year/translate');
+  }
+
+  /**
+   * Tests that overrides do not affect listing screens.
+   */
+  public function testListingPageWithOverrides() {
+    $original_label = 'Default';
+    $overridden_label = 'Overridden label';
+
+    // Set up an override.
+    $settings['config']['config_test.dynamic.dotted.default']['label'] = (object) array(
+      'value' => $overridden_label,
+      'required' => TRUE,
+    );
+    $this->writeSettings($settings);
+
+    // Test that the overridden label is loaded with the entity.
+    $this->assertEqual(config_test_load('dotted.default')->label(), $overridden_label);
+
+    // Test that the original label on the listing page is intact.
+    $this->drupalGet('admin/config/regional/config-translation/config_test');
+    $this->assertText($original_label);
+    $this->assertNoText($overridden_label);
   }
 
 }

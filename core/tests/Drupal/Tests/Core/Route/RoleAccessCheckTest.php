@@ -50,7 +50,7 @@ class RoleAccessCheckTest extends UnitTestCase {
         '_controller' => '\Drupal\router_test\TestControllers::test1',
       ),
       array(
-        '_role' => 'role_test_1+role_test_2',
+        '_role' => 'role_test_1,role_test_2',
       )
     ));
     // Ensure that trimming the values works on "OR" conjunctions.
@@ -59,7 +59,7 @@ class RoleAccessCheckTest extends UnitTestCase {
         '_controller' => '\Drupal\router_test\TestControllers::test1',
       ),
       array(
-        '_role' => 'role_test_1 + role_test_2',
+        '_role' => 'role_test_1 , role_test_2',
       )
     ));
     $route_collection->add('role_test_5', new Route('/role_test_5',
@@ -67,7 +67,7 @@ class RoleAccessCheckTest extends UnitTestCase {
         '_controller' => '\Drupal\router_test\TestControllers::test1',
       ),
       array(
-        '_role' => 'role_test_1,role_test_2',
+        '_role' => 'role_test_1+role_test_2',
       )
     ));
     // Ensure that trimming the values works on "AND" conjunctions.
@@ -76,7 +76,7 @@ class RoleAccessCheckTest extends UnitTestCase {
         '_controller' => '\Drupal\router_test\TestControllers::test1',
       ),
       array(
-        '_role' => 'role_test_1 , role_test_2',
+        '_role' => 'role_test_1 + role_test_2',
       )
     ));
 
@@ -148,14 +148,14 @@ class RoleAccessCheckTest extends UnitTestCase {
 
     foreach ($grant_accounts as $account) {
       $message = sprintf('Access granted for user with the roles %s on path: %s', implode(', ', $account->getRoles()), $path);
-      $this->assertEquals(AccessResult::allowed()->cachePerRole(), $role_access_check->access($collection->get($path), $account), $message);
+      $this->assertEquals(AccessResult::allowed()->addCacheContexts(['user.roles']), $role_access_check->access($collection->get($path), $account), $message);
     }
 
     // Check all users which don't have access.
     foreach ($deny_accounts as $account) {
       $message = sprintf('Access denied for user %s with the roles %s on path: %s', $account->id(), implode(', ', $account->getRoles()), $path);
       $has_access = $role_access_check->access($collection->get($path), $account);
-      $this->assertEquals(AccessResult::create()->cachePerRole(), $has_access, $message);
+      $this->assertEquals(AccessResult::neutral()->addCacheContexts(['user.roles']), $has_access, $message);
     }
   }
 

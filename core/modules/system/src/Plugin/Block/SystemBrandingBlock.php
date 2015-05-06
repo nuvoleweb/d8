@@ -7,8 +7,8 @@
 
 namespace Drupal\system\Plugin\Block;
 
-use Drupal\Component\Utility\NestedArray;
 use Drupal\Core\Block\BlockBase;
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
@@ -71,12 +71,6 @@ class SystemBrandingBlock extends BlockBase implements ContainerFactoryPluginInt
       'use_site_name' => TRUE,
       'use_site_slogan' => TRUE,
       'label_display' => FALSE,
-      // Modify the default max age for the 'Site branding' block: the site
-      // logo, name and slogan are static for a given language, except when the
-      // theme settings are updated (global theme settings or theme-specific
-      // settings). Cache tags for those cases ensure that a cached version of
-      // this block is invalidated automatically.
-      'cache' => array('max_age' => \Drupal\Core\Cache\Cache::PERMANENT),
     );
   }
 
@@ -169,7 +163,7 @@ class SystemBrandingBlock extends BlockBase implements ContainerFactoryPluginInt
     $build['site_logo'] = array(
       '#theme' => 'image',
       '#uri' => $logo['url'],
-      '#alt' => t('Home'),
+      '#alt' => $this->t('Home'),
       '#access' => $this->configuration['use_site_logo'],
     );
 
@@ -190,25 +184,10 @@ class SystemBrandingBlock extends BlockBase implements ContainerFactoryPluginInt
    * {@inheritdoc}
    */
   public function getCacheTags() {
-    // The theme-specific cache tag is set automatically for each block, but the
-    // output of this block also depends on the global theme settings.
-    $tags = array(
-      'theme_global_setting' => TRUE,
+    return Cache::mergeTags(
+      parent::getCacheTags(),
+      $this->configFactory->get('system.site')->getCacheTags()
     );
-    return NestedArray::mergeDeep(parent::getCacheTags(), $tags);
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  protected function getRequiredCacheContexts() {
-    // The 'Site branding' block must be cached per theme and per language: the
-    // site logo, name and slogan are defined on a per-theme basis, and the name
-    // and slogan may be translated.
-    // We don't need to return 'cache_context.theme' also, because that cache
-    // context is automatically applied to all blocks.
-    // @see \Drupal\block\BlockViewBuilder::viewMultiple()
-    return array('cache_context.language');
   }
 
 }

@@ -33,23 +33,27 @@ class reEnableModuleFieldTest extends WebTestBase {
     parent::setUp();
 
     $this->drupalCreateContentType(array('type' => 'article'));
-    $this->article_creator = $this->drupalCreateUser(array('create article content', 'edit own article content'));
-    $this->drupalLogin($this->article_creator);
+    $this->drupalLogin($this->drupalCreateUser(array(
+      'create article content',
+      'edit own article content',
+    )));
   }
 
   /**
    * Test the behavior of a field module after being disabled and re-enabled.
+   *
+   * @see field_system_info_alter()
    */
   function testReEnabledField() {
 
     // Add a telephone field to the article content type.
     $field_storage = entity_create('field_storage_config', array(
-      'name' => 'field_telephone',
+      'field_name' => 'field_telephone',
       'entity_type' => 'node',
       'type' => 'telephone',
     ));
     $field_storage->save();
-    entity_create('field_instance_config', array(
+    entity_create('field_config', array(
       'field_storage' => $field_storage,
       'bundle' => 'article',
       'label' => 'Telephone Number',

@@ -8,6 +8,7 @@
 namespace Drupal\Core\Field;
 
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Render\Element;
 
 /**
  * Base class for 'Field formatter' plugin implementations.
@@ -60,7 +61,7 @@ abstract class FormatterBase extends PluginSettingsBase implements FormatterInte
    * @param string $view_mode
    *   The view mode.
    * @param array $third_party_settings
-   *   Any third party settings settings.
+   *   Any third party settings.
    */
   public function __construct($plugin_id, $plugin_definition, FieldDefinitionInterface $field_definition, array $settings, $label, $view_mode, array $third_party_settings) {
     parent::__construct(array(), $plugin_id, $plugin_definition);
@@ -76,10 +77,11 @@ abstract class FormatterBase extends PluginSettingsBase implements FormatterInte
    * {@inheritdoc}
    */
   public function view(FieldItemListInterface $items) {
-    $addition = array();
-
     $elements = $this->viewElements($items);
-    if ($elements) {
+
+    // If there are actual renderable children, use #theme => field, otherwise,
+    // let access cacheability metadata pass through for correct bubbling.
+    if (Element::children($elements)) {
       $entity = $items->getEntity();
       $entity_type = $entity->getEntityTypeId();
       $field_name = $this->fieldDefinition->getName();
@@ -99,10 +101,10 @@ abstract class FormatterBase extends PluginSettingsBase implements FormatterInte
         '#formatter' => $this->getPluginId(),
       );
 
-      $addition = array_merge($info, $elements);
+      $elements = array_merge($info, $elements);
     }
 
-    return $addition;
+    return $elements;
   }
 
   /**

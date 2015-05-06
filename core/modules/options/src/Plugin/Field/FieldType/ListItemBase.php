@@ -13,23 +13,23 @@ use Drupal\Core\Field\FieldItemBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Form\OptGroup;
 use Drupal\Core\Session\AccountInterface;
-use Drupal\Core\TypedData\AllowedValuesInterface;
+use Drupal\Core\TypedData\OptionsProviderInterface;
 
 /**
  * Plugin base class inherited by the options field types.
  */
-abstract class ListItemBase extends FieldItemBase implements AllowedValuesInterface {
+abstract class ListItemBase extends FieldItemBase implements OptionsProviderInterface {
 
   use AllowedTagsXssTrait;
 
   /**
    * {@inheritdoc}
    */
-  public static function defaultSettings() {
+  public static function defaultStorageSettings() {
     return array(
       'allowed_values' => array(),
       'allowed_values_function' => '',
-    ) + parent::defaultSettings();
+    ) + parent::defaultStorageSettings();
   }
 
   /**
@@ -63,7 +63,7 @@ abstract class ListItemBase extends FieldItemBase implements AllowedValuesInterf
    * {@inheritdoc}
    */
   public function getSettableOptions(AccountInterface $account = NULL) {
-    $allowed_options = options_allowed_values($this->getFieldDefinition(), $this->getEntity());
+    $allowed_options = options_allowed_values($this->getFieldDefinition()->getFieldStorageDefinition(), $this->getEntity());
     return $allowed_options;
   }
 
@@ -84,7 +84,7 @@ abstract class ListItemBase extends FieldItemBase implements AllowedValuesInterf
   /**
    * {@inheritdoc}
    */
-  public function settingsForm(array &$form, FormStateInterface $form_state, $has_data) {
+  public function storageSettingsForm(array &$form, FormStateInterface $form_state, $has_data) {
     $allowed_values = $this->getSetting('allowed_values');
     $allowed_values_function = $this->getSetting('allowed_values_function');
 
@@ -150,7 +150,7 @@ abstract class ListItemBase extends FieldItemBase implements AllowedValuesInterf
 
       // Prevent removing values currently in use.
       if ($element['#field_has_data']) {
-        $lost_keys = array_diff(array_keys($element['#allowed_values']), array_keys($values));
+        $lost_keys = array_keys(array_diff_key($element['#allowed_values'], $values));
         if (_options_values_in_use($element['#entity_type'], $element['#field_name'], $lost_keys)) {
           $form_state->setError($element, t('Allowed values list: some values are being removed while currently in use.'));
         }
@@ -252,7 +252,7 @@ abstract class ListItemBase extends FieldItemBase implements AllowedValuesInterf
   /**
    * @inheritdoc.
    */
-  public static function settingsToConfigData(array $settings) {
+  public static function storageSettingsToConfigData(array $settings) {
     if (isset($settings['allowed_values'])) {
       $settings['allowed_values'] = static::structureAllowedValues($settings['allowed_values']);
     }
@@ -262,7 +262,7 @@ abstract class ListItemBase extends FieldItemBase implements AllowedValuesInterf
   /**
    * @inheritdoc.
    */
-  public static function settingsFromConfigData(array $settings) {
+  public static function storageSettingsFromConfigData(array $settings) {
     if (isset($settings['allowed_values'])) {
       $settings['allowed_values'] = static::simplifyAllowedValues($settings['allowed_values']);
     }

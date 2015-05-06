@@ -43,7 +43,7 @@ class User extends Entity {
    */
   protected function defineOptions() {
     $options = parent::defineOptions();
-    $options['restrict_roles'] = array('default' => FALSE, 'bool' => TRUE);
+    $options['restrict_roles'] = array('default' => FALSE);
     $options['roles'] = array('default' => array());
 
     return $options;
@@ -65,7 +65,7 @@ class User extends Entity {
     $form['roles'] = array(
       '#type' => 'checkboxes',
       '#title' => $this->t('Restrict to the selected roles'),
-      '#options' => array_map(array('\Drupal\Component\Utility\String', 'checkPlain'), user_role_names(TRUE)),
+      '#options' => array_map(array('\Drupal\Component\Utility\SafeMarkup', 'checkPlain'), user_role_names(TRUE)),
       '#default_value' => $this->options['roles'],
       '#description' => $this->t('If no roles are selected, users from any role will be allowed.'),
       '#states' => array(
@@ -100,5 +100,19 @@ class User extends Entity {
 
     return $role_check_success && parent::validateEntity($entity);
   }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    $dependencies = parent::calculateDependencies();
+
+    foreach ($this->entityManager->getStorage('user_role')->loadMultiple(array_keys($this->options['roles'])) as $role) {
+      $dependencies[$role->getConfigDependencyKey()][] = $role->getConfigDependencyName();
+    }
+
+    return $dependencies;
+  }
+
 
 }

@@ -106,10 +106,10 @@ interface EntityViewBuilderInterface {
    *
    * @param \Drupal\Core\Field\FieldItemListInterface $items
    *   FieldItemList containing the values to be displayed.
-   * @param array $display_options
+   * @param string|array $display_options
    *  Can be either:
    *   - The name of a view mode. The field will be displayed according to the
-   *     display settings specified for this view mode in the $instance
+   *     display settings specified for this view mode in the $field
    *     definition for the field in the entity's bundle. If no display settings
    *     are found for the view mode, the settings for the 'default' view mode
    *     will be used.
@@ -137,7 +137,7 @@ interface EntityViewBuilderInterface {
    *
    * @param \Drupal\Core\Field\FieldItemInterface $item
    *   FieldItem to be displayed.
-   * @param array $display_options
+   * @param string|array $display_options
    *   Can be either the name of a view mode, or an array of display settings.
    *   See EntityViewBuilderInterface::viewField() for more information.
    *
@@ -157,6 +157,6 @@ interface EntityViewBuilderInterface {
    * @return array
    *   An array of cache tags.
    */
-  public function getCacheTag();
+  public function getCacheTags();
 
 }

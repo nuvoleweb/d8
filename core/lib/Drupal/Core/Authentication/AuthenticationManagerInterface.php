@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains Drupal\Core\Authentication\AuthenticationManagerInterface.
+ * Contains \Drupal\Core\Authentication\AuthenticationManagerInterface
  */
 
 namespace Drupal\Core\Authentication;
@@ -10,14 +10,21 @@ namespace Drupal\Core\Authentication;
 /**
  * Defines an interface for authentication managers.
  */
-interface AuthenticationManagerInterface extends AuthenticationProviderInterface {
+interface AuthenticationManagerInterface {
 
   /**
-   * Returns the service id of the default authentication provider.
+   * Adds a provider to the array of registered providers.
    *
-   * @return string
-   *   The service id of the default authentication provider.
+   * @param \Drupal\Core\Authentication\AuthenticationProviderInterface $provider
+   *   The provider object.
+   * @param string $provider_id
+   *   Identifier of the provider.
+   * @param int $priority
+   *   (optional) The provider's priority.
+   * @param bool $global
+   *   (optional) TRUE if the provider is to be applied globally on all routes.
+   *   Defaults to FALSE.
    */
-  public function defaultProviderId();
+  public function addProvider(AuthenticationProviderInterface $provider, $provider_id, $priority = 0, $global = FALSE);
 
 }

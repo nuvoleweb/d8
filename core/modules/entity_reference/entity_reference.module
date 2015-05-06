@@ -11,8 +11,9 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Render\Element;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\field\Entity\FieldStorageConfig;
-use Drupal\field\Entity\FieldInstanceConfig;
+use Drupal\field\Entity\FieldConfig;
 use Drupal\field\FieldStorageConfigInterface;
+use Drupal\field\FieldConfigInterface;
 
 /**
  * Implements hook_help().
@@ -22,17 +23,25 @@ function entity_reference_help($route_name, RouteMatchInterface $route_match) {
     case 'help.page.entity_reference':
       $output = '';
       $output .= '<h3>' . t('About') . '</h3>';
-      $output .= '<p>' . t('The Entity Reference module allows you to create fields that contain links to other entities (such as content items, taxonomy terms, etc.) within the site. This allows you, for example, to include a link to a user within a content item. For more information, see <a href="!er_do">the online documentation for the Entity Reference module</a>, the <a href="!entity_help">Entity module help page</a>, and the <a href="!field_help">Field module help page</a>.', array('!field_help' => \Drupal::url('help.page', array('name' => 'field')),'!entity_help' => \Drupal::url('help.page', array('name' => 'entity')), '!er_do' => 'https://drupal.org/documentation/modules/entityreference')) . '</p>';
+      $output .= '<p>' . t('The Entity Reference module allows you to create fields that contain links to other entities (such as content items, taxonomy terms, etc.) within the site. This allows you, for example, to include a link to a user within a content item. For more information, see <a href="!er_do">the online documentation for the Entity Reference module</a> and the <a href="!field_help">Field module help page</a>.', array('!field_help' => \Drupal::url('help.page', array('name' => 'field')), '!er_do' => 'https://drupal.org/documentation/modules/entityreference')) . '</p>';
       $output .= '<h3>' . t('Uses') . '</h3>';
       $output .= '<dl>';
       $output .= '<dt>' . t('Managing and displaying entity reference fields') . '</dt>';
       $output .= '<dd>' . t('The <em>settings</em> and the <em>display</em> of the entity reference field can be configured separately. See the <a href="!field_ui">Field UI help</a> for more information on how to manage fields and their display.', array('!field_ui' => \Drupal::url('help.page', array('name' => 'field_ui')))) . '</dd>';
       $output .= '<dt>' . t('Selecting reference type') . '</dt>';
-      $output .= '<dd>' . t('In the field settings you can select which entity type you want to create a reference to.') . '</dd>';
+      $output .= '<dd>' . t('In the field settings you can select which type of item you want to create a reference to.') . '</dd>';
       $output .= '<dt>' . t('Filtering and sorting reference fields') . '</dt>';
       $output .= '<dd>' . t('Depending on the chosen entity type, additional filtering and sorting options are available for the list of entities that can be referred to, in the field settings. For example, the list of users can be filtered by role and sorted by name or ID.') . '</dd>';
       $output .= '<dt>' . t('Displaying a reference') . '</dt>';
-      $output .= '<dd>' . t('An entity reference can be displayed as a simple label with or without a link to the entity. Alternatively, the referenced entity can be displayed as a teaser (or any other available view mode) inside the referencing entity.') . '</dd>';
+      $output .= '<dd>' . t('An entity reference can be displayed as a simple label with or without a link to the entity. Alternatively, the referenced entity can be displayed as a teaser (or any other available view mode) inside the referencing entity. Certain entity types may provide additional display options. You can configure how the entity reference is displayed on the <em>Manage display</em> page for the entity.') . '</dd>';
+      $output .= '<dt>' . t('Configuring form displays') . '</dt>';
+      $output .= '<dd>' . t('Reference fields have several widgets available on the <em>Manage form display</em> page:');
+      $output .= '<ul>';
+      $output .= '<li>' . t('The <em>Check boxes/radio buttons</em> widget displays the existing entities for the entity type as check boxes or radio buttons based on the <em>Allowed number of values</em> set for the field.') . '</li>';
+      $output .= '<li>' . t('The <em>Select list</em> widget displays the existing entities in a drop-down list or scrolling list box based on the <em>Allowed number of values</em> setting for the field.') . '</li>';
+      $output .= '<li>' . t('The <em>Autocomplete</em> widget displays text fields in which users can type entity labels based on the <em>Allowed number of values</em>. The widget can be configured to display all entities that contain the typed characters or restricted to those starting with those characters.') . '</li>';
+      $output .= '<li>' . t('The <em>Autocomplete (Tags style)</em> widget displays a multi-text field in which users can type in a comma-separated list of entity labels.') . '</li>';
+      $output .= '</ul>';
       $output .= '</dl>';
       return $output;
   }
@@ -69,7 +78,7 @@ function entity_reference_field_widget_info_alter(&$info) {
  * Reset the instance handler settings, when the target type is changed.
  */
 function entity_reference_field_storage_config_update(FieldStorageConfigInterface $field_storage) {
-  if ($field_storage->type != 'entity_reference') {
+  if ($field_storage->getType() != 'entity_reference') {
     // Only act on entity reference fields.
     return;
   }
@@ -84,40 +93,63 @@ function entity_reference_field_storage_config_update(FieldStorageConfigInterfac
     return;
   }
 
-  if (empty($field_storage->bundles)) {
-    // Field has no instances.
-    return;
-  }
-
-  $field_name = $field_storage->getName();
-
-  foreach ($field_storage->bundles() as $entity_type => $bundles) {
-    foreach ($bundles as $bundle) {
-      $instance = FieldInstanceConfig::loadByName($entity_type, $bundle, $field_name);
-      $instance->settings['handler_settings'] = array();
-      $instance->save();
-    }
+  foreach ($field_storage->getBundles() as $bundle) {
+    $field = FieldConfig::loadByName($field_storage->getTargetEntityTypeId(), $bundle, $field_storage->getName());
+    $field->settings['handler_settings'] = array();
+    $field->save();
   }
 }
 
 /**
- * Render API callback: Processes the field instance settings form and allows
- * access to the form state.
+ * Implements hook_ENTITY_TYPE_presave() for 'field_config'.
  *
- * @see entity_reference_field_instance_settings_form()
+ * Determine the selection handler plugin ID for an entity reference field.
  */
-function _entity_reference_field_instance_settings_ajax_process($form, FormStateInterface $form_state) {
-  _entity_reference_field_instance_settings_ajax_process_element($form, $form);
+function entity_reference_field_config_presave(FieldConfigInterface $field) {
+  if ($field->getType() != 'entity_reference') {
+    // Only act on entity reference fields.
+    return;
+  }
+
+  if ($field->isSyncing()) {
+    // Don't change anything during a configuration sync.
+    return;
+  }
+
+  $target_type = $field->getFieldStorageDefinition()->getSetting('target_type');
+  $selection_manager = \Drupal::service('plugin.manager.entity_reference_selection');
+  list($current_handler) = explode(':', $field->getSetting('handler'), 2);
+  $field->settings['handler'] = $selection_manager->getPluginId($target_type, $current_handler);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter() for 'field_ui_field_storage_add_form'.
+ */
+function entity_reference_form_field_ui_field_storage_add_form_alter(array &$form) {
+  // Move the "Entity reference" option to the end of the list and rename it to
+  // "Other".
+  unset($form['add']['new_storage_type']['#options'][t('Reference')]['entity_reference']);
+  $form['add']['new_storage_type']['#options'][t('Reference')]['entity_reference'] = t('Other…');
+}
+
+/**
+ * Render API callback: Processes the field settings form and allows access to
+ * the form state.
+ *
+ * @see entity_reference_field_field_settings_form()
+ */
+function _entity_reference_field_field_settings_ajax_process($form, FormStateInterface $form_state) {
+  _entity_reference_field_field_settings_ajax_process_element($form, $form);
   return $form;
 }
 
 /**
  * Adds entity_reference specific properties to AJAX form elements from the
- * field instance settings form.
+ * field settings form.
  *
- * @see _entity_reference_field_instance_settings_ajax_process()
+ * @see _entity_reference_field_field_settings_ajax_process()
  */
-function _entity_reference_field_instance_settings_ajax_process_element(&$element, $main_form) {
+function _entity_reference_field_field_settings_ajax_process_element(&$element, $main_form) {
   if (!empty($element['#ajax'])) {
     $element['#ajax'] = array(
       'callback' => 'entity_reference_settings_ajax',
@@ -127,7 +159,7 @@ function _entity_reference_field_instance_settings_ajax_process_element(&$elemen
   }
 
   foreach (Element::children($element) as $key) {
-    _entity_reference_field_instance_settings_ajax_process_element($element[$key], $main_form);
+    _entity_reference_field_field_settings_ajax_process_element($element[$key], $main_form);
   }
 }
 
@@ -150,13 +182,13 @@ function _entity_reference_form_process_merge_parent($element) {
  */
 function _entity_reference_element_validate_filter(&$element, FormStateInterface $form_state) {
   $element['#value'] = array_filter($element['#value']);
-  form_set_value($element, $element['#value'], $form_state);
+  $form_state->setValueForElement($element, $element['#value']);
 }
 
 /**
  * Ajax callback for the handler settings form.
  *
- * @see entity_reference_field_instance_settings_form()
+ * @see entity_reference_field_field_settings_form()
  */
 function entity_reference_settings_ajax($form, FormStateInterface $form_state) {
   return NestedArray::getValue($form, $form_state->getTriggeringElement()['#ajax']['element']);
@@ -165,7 +197,7 @@ function entity_reference_settings_ajax($form, FormStateInterface $form_state) {
 /**
  * Submit handler for the non-JS case.
  *
- * @see entity_reference_field_instance_settings_form()
+ * @see entity_reference_field_field_settings_form()
  */
 function entity_reference_settings_ajax_submit($form, FormStateInterface $form_state) {
   $form_state->setRebuild();
@@ -178,61 +210,3 @@ function entity_reference_query_entity_reference_alter(AlterableInterface $query
   $handler = $query->getMetadata('entity_reference_selection_handler');
   $handler->entityQueryAlter($query);
 }
-
-/**
- * Creates an instance of a entity reference field on the specified bundle.
- *
- * @param string $entity_type
- *   The type of entity the field instance will be attached to.
- * @param string $bundle
- *   The bundle name of the entity the field instance will be attached to.
- * @param string $field_name
- *   The name of the field; if it already exists, a new instance of the existing
- *   field will be created.
- * @param string $field_label
- *   The label of the field instance.
- * @param string $target_entity_type
- *   The type of the referenced entity.
- * @param string $selection_handler
- *   The selection handler used by this field.
- * @param array $selection_handler_settings
- *   An array of settings supported by the selection handler specified above.
- *   (e.g. 'target_bundles', 'sort', 'auto_create', etc).
- * @param int $cardinality
- *   The cardinality of the field.
- *
- * @see \Drupal\entity_reference\Plugin\entity_reference\selection\SelectionBase::settingsForm()
- */
-function entity_reference_create_instance($entity_type, $bundle, $field_name, $field_label, $target_entity_type, $selection_handler = 'default', $selection_handler_settings = array(), $cardinality = 1) {
-  // Look for or add the specified field to the requested entity bundle.
-  $field_storage = FieldStorageConfig::loadByName($entity_type, $field_name);
-  $instance = FieldInstanceConfig::loadByName($entity_type, $bundle, $field_name);
-
-  if (empty($field_storage)) {
-    $field_storage = array(
-      'name' => $field_name,
-      'type' => 'entity_reference',
-      'entity_type' => $entity_type,
-      'cardinality' => $cardinality,
-      'settings' => array(
-        'target_type' => $target_entity_type,
-      ),
-    );
-    entity_create('field_storage_config', $field_storage)->save();
-  }
-
-  if (empty($instance)) {
-    $instance = array(
-      'field_name' => $field_name,
-      'entity_type' => $entity_type,
-      'bundle' => $bundle,
-      'label' => $field_label,
-      'settings' => array(
-        'handler' => $selection_handler,
-        'handler_settings' => $selection_handler_settings,
-      ),
-    );
-    entity_create('field_instance_config', $instance)->save();
-  }
-}
-

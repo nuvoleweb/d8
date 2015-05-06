@@ -8,6 +8,8 @@
 namespace Drupal\taxonomy\Plugin\views\field;
 
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Routing\RedirectDestinationTrait;
+use Drupal\Core\Url;
 use Drupal\views\Plugin\views\field\FieldPluginBase;
 use Drupal\views\Plugin\views\display\DisplayPluginBase;
 use Drupal\views\ResultRow;
@@ -22,8 +24,10 @@ use Drupal\views\ViewExecutable;
  */
 class LinkEdit extends FieldPluginBase {
 
+  use RedirectDestinationTrait;
+
   /**
-   * Overrides Drupal\views\Plugin\views\field\FieldPluginBase::init().
+   * {@inheritdoc}
    */
   public function init(ViewExecutable $view, DisplayPluginBase $display, array &$options = NULL) {
     parent::init($view, $display, $options);
@@ -32,23 +36,32 @@ class LinkEdit extends FieldPluginBase {
     $this->additional_fields['vid'] = 'vid';
   }
 
+  /**
+   * {@inheritdoc}
+   */
   protected function defineOptions() {
     $options = parent::defineOptions();
 
-    $options['text'] = array('default' => '', 'translatable' => TRUE);
+    $options['text'] = array('default' => '');
 
     return $options;
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     $form['text'] = array(
       '#type' => 'textfield',
-      '#title' => t('Text to display'),
+      '#title' => $this->t('Text to display'),
       '#default_value' => $this->options['text'],
     );
     parent::buildOptionsForm($form, $form_state);
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function query() {
     $this->ensureMyTable();
     $this->addAdditionalFields();
@@ -67,8 +80,8 @@ class LinkEdit extends FieldPluginBase {
         'vid' => $values->{$this->aliases['vid']},
       ));
       if ($term->access('update')) {
-        $text = !empty($this->options['text']) ? $this->options['text'] : t('Edit');
-        return l($text, 'taxonomy/term/'. $tid . '/edit', array('query' => drupal_get_destination()));
+        $text = !empty($this->options['text']) ? $this->options['text'] : $this->t('Edit');
+        return \Drupal::l($text, new Url('entity.taxonomy.edit_form', ['taxonomy_term' => $tid], array('query' => $this->getDestinationArray())));
       }
     }
   }

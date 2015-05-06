@@ -4,17 +4,6 @@ views.argument.argument_comment_user_uid:
   type: views_argument
   label: 'Commented user ID'
 
-views.field.comment:
-  type: views_field
-  label: 'Comment'
-  mapping:
-    link_to_comment:
-      type: boolean
-      label: 'Link this field to its comment'
-    link_to_entity:
-      type: boolean
-      label: 'Link field to the entity if there is no comment'
-
 views.field.comment_depth:
   type: views_field
   label: 'Comment depth'
@@ -78,14 +67,6 @@ views.field.comment_ces_last_updated:
   type: views_field
   label: 'Newer of last comment / node updated'
 
-views.field.comment_username:
-  type: views_field
-  label: 'Node comment status'
-  mapping:
-    link_to_user:
-      type: boolean
-      label: 'Link this field to its user or an author''s homepage'
-
 views.filter.node_comment:
   type: views.filter.in_operator
   label: 'Comment node status'
@@ -98,20 +79,6 @@ views.filter.comment_user_uid:
   type: views_filter
   label: 'Node user posted comment'
 
-"views.row.entity:comment":
-  type: mapping
-  label: 'Entity options'
-  mapping:
-    view_mode:
-      type: string
-      label: 'View mode'
-    relationship:
-      type: string
-      label: 'Relationship'
-    links:
-      type: boolean
-      label: 'Display links'
-
 views.row.comment_rss:
   type: views_row
   label: 'Comment'
@@ -119,9 +86,6 @@ views.row.comment_rss:
     view_mode:
       type: string
       label: 'Display type'
-    links:
-      type: boolean
-      label: 'Display links'
 
 views.sort.comment_ces_last_comment_name:
   type: views_sort

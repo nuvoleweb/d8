@@ -24,14 +24,21 @@ class EntityRevisionsTest extends WebTestBase {
    */
   public static $modules = array('entity_test');
 
+  /**
+   * A user with permission to administer entity_test content.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $webUser;
+
   protected function setUp() {
     parent::setUp();
 
     // Create and login user.
-    $this->web_user = $this->drupalCreateUser(array(
+    $this->webUser = $this->drupalCreateUser(array(
       'administer entity_test content',
     ));
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
   }
 
   /**
@@ -41,7 +48,7 @@ class EntityRevisionsTest extends WebTestBase {
 
     // All revisable entity variations have to have the same results.
     foreach (entity_test_entity_types(ENTITY_TEST_TYPES_REVISABLE) as $entity_type) {
-      $this->assertRevisions($entity_type);
+      $this->runRevisionsTests($entity_type);
     }
   }
 
@@ -51,18 +58,19 @@ class EntityRevisionsTest extends WebTestBase {
    * @param string $entity_type
    *   The entity type to run the tests with.
    */
-  protected function assertRevisions($entity_type) {
+  protected function runRevisionsTests($entity_type) {
 
     // Create initial entity.
     $entity = entity_create($entity_type, array(
       'name' => 'foo',
-      'user_id' => $this->web_user->id(),
+      'user_id' => $this->webUser->id(),
     ));
     $entity->field_test_text->value = 'bar';
     $entity->save();
 
     $names = array();
     $texts = array();
+    $created = array();
     $revision_ids = array();
 
     // Create three revisions.
@@ -76,6 +84,7 @@ class EntityRevisionsTest extends WebTestBase {
       $entity->setNewRevision(TRUE);
       $names[] = $entity->name->value = $this->randomMachineName(32);
       $texts[] = $entity->field_test_text->value = $this->randomMachineName(32);
+      $created[] = $entity->created->value = time() + $i + 1;
       $entity->save();
       $revision_ids[] = $entity->revision_id->value;
 
@@ -93,12 +102,16 @@ class EntityRevisionsTest extends WebTestBase {
       $this->assertEqual($entity_revision->revision_id->value, $revision_ids[$i], format_string('%entity_type: Revision ID matches.', array('%entity_type' => $entity_type)));
       $this->assertEqual($entity_revision->name->value, $names[$i], format_string('%entity_type: Name matches.', array('%entity_type' => $entity_type)));
       $this->assertEqual($entity_revision->field_test_text->value, $texts[$i], format_string('%entity_type: Text matches.', array('%entity_type' => $entity_type)));
+
+      // Check non-revisioned values are loaded.
+      $this->assertTrue(isset($entity_revision->created->value), format_string('%entity_type: Non-revisioned field is loaded.', array('%entity_type' => $entity_type)));
+      $this->assertEqual($entity_revision->created->value, $created[2], format_string('%entity_type: Non-revisioned field value is the same between revisions.', array('%entity_type' => $entity_type)));
     }
 
     // Confirm the correct revision text appears in the edit form.
     $entity = entity_load($entity_type, $entity->id->value);
     $this->drupalGet($entity_type . '/manage/' . $entity->id->value);
-    $this->assertFieldById('edit-name', $entity->name->value, format_string('%entity_type: Name matches in UI.', array('%entity_type' => $entity_type)));
+    $this->assertFieldById('edit-name-0-value', $entity->name->value, format_string('%entity_type: Name matches in UI.', array('%entity_type' => $entity_type)));
     $this->assertFieldById('edit-field-test-text-0-value', $entity->field_test_text->value, format_string('%entity_type: Text matches in UI.', array('%entity_type' => $entity_type)));
   }
 }

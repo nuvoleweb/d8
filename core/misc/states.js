@@ -22,8 +22,10 @@
   Drupal.behaviors.states = {
     attach: function (context, settings) {
       var $states = $(context).find('[data-drupal-states]');
-      var config, state;
-      for (var i = 0, il = $states.length; i < il; i += 1) {
+      var config;
+      var state;
+      var il = $states.length;
+      for (var i = 0; i < il; i++) {
         config = JSON.parse($states[i].getAttribute('data-drupal-states'));
         for (state in config) {
           if (config.hasOwnProperty(state)) {
@@ -55,7 +57,7 @@
    *     AND and OR clauses.
    */
   states.Dependent = function (args) {
-    $.extend(this, { values: {}, oldValue: null }, args);
+    $.extend(this, {values: {}, oldValue: null}, args);
 
     this.dependees = this.getDependees();
     for (var selector in this.dependees) {
@@ -98,7 +100,8 @@
      *   dependee's compliance status.
      */
     initializeDependee: function (selector, dependeeStates) {
-      var state, self = this;
+      var state;
+      var self = this;
 
       function stateEventHandler(e) {
         self.update(e.data.selector, e.data.state, e.value);
@@ -124,7 +127,7 @@
           $(selector).on('state:' + state, {selector: selector, state: state}, stateEventHandler);
 
           // Make sure the event we just bound ourselves to is actually fired.
-          new states.Trigger({ selector: selector, state: state });
+          new states.Trigger({selector: selector, state: state});
         }
       }
     },
@@ -190,7 +193,7 @@
 
         // By adding "trigger: true", we ensure that state changes don't go into
         // infinite loops.
-        this.element.trigger({ type: 'state:' + this.state, value: value, trigger: true });
+        this.element.trigger({type: 'state:' + this.state, value: value, trigger: true});
       }
     },
 
@@ -212,7 +215,8 @@
       if ($.isArray(constraints)) {
         // This constraint is an array (OR or XOR).
         var hasXor = $.inArray('xor', constraints) === -1;
-        for (var i = 0, len = constraints.length; i < len; i++) {
+        var len = constraints.length;
+        for (var i = 0; i < len; i++) {
           if (constraints[i] !== 'xor') {
             var constraint = this.checkConstraints(constraints[i], selector, i);
             // Return if this is OR and we have a satisfied constraint or if this
@@ -355,14 +359,14 @@
         var value = valueFn.call(this.element, e);
         // Only trigger the event if the value has actually changed.
         if (oldValue !== value) {
-          this.element.trigger({ type: 'state:' + this.state, value: value, oldValue: oldValue });
+          this.element.trigger({type: 'state:' + this.state, value: value, oldValue: oldValue});
           oldValue = value;
         }
       }, this));
 
       states.postponed.push($.proxy(function () {
         // Trigger the event once for initialization purposes.
-        this.element.trigger({ type: 'state:' + this.state, value: oldValue, oldValue: null });
+        this.element.trigger({type: 'state:' + this.state, value: oldValue, oldValue: null});
       }, this));
     }
   };
@@ -436,7 +440,8 @@
     this.pristine = this.name = state;
 
     // Normalize the state name.
-    while (true) {
+    var process = true;
+    do {
       // Iteratively remove exclamation marks and invert the value.
       while (this.name.charAt(0) === '!') {
         this.name = this.name.substring(1);
@@ -448,9 +453,9 @@
         this.name = states.State.aliases[this.name];
       }
       else {
-        break;
+        process = false;
       }
-    }
+    } while (process);
   };
 
   /**
@@ -519,7 +524,7 @@
   $(document).on('state:required', function (e) {
     if (e.trigger) {
       if (e.value) {
-        var $label = $(e.target).attr({ 'required': 'required', 'aria-required': 'aria-required' }).closest('.form-item, .form-wrapper').find('label');
+        var $label = $(e.target).attr({'required': 'required', 'aria-required': 'aria-required'}).closest('.form-item, .form-wrapper').find('label');
         // Avoids duplicate required markers on initialization.
         if (!$label.hasClass('form-required').length) {
           $label.addClass('form-required');
@@ -560,7 +565,15 @@
    * Bitwise AND with a third undefined state.
    */
   function ternary(a, b) {
-    return typeof a === 'undefined' ? b : (typeof b === 'undefined' ? a : a && b);
+    if (typeof a === 'undefined') {
+      return b;
+    }
+    else if (typeof b === 'undefined') {
+      return a;
+    }
+    else {
+      return a && b;
+    }
   }
 
   /**
@@ -574,7 +587,12 @@
    * Compares two values while ignoring undefined values.
    */
   function compare(a, b) {
-    return (a === b) ? (typeof a === 'undefined' ? a : true) : (typeof a === 'undefined' || typeof b === 'undefined');
+    if (a === b) {
+      return typeof a === 'undefined' ? a : true;
+    }
+    else {
+      return typeof a === 'undefined' || typeof b === 'undefined';
+    }
   }
 
 })(jQuery);

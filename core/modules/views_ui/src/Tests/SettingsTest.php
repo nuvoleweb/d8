@@ -71,7 +71,7 @@ class SettingsTest extends UITestBase {
     // Configure to always show the advanced settings.
     // @todo It doesn't seem to be a way to test this as this works just on js.
 
-    // Configure to show the embedable display.
+    // Configure to show the embeddable display.
     $edit = array(
       'ui_show_display_embed' => TRUE,
     );
@@ -125,13 +125,11 @@ class SettingsTest extends UITestBase {
     $edit = array(
       'skip_cache' => TRUE,
       'sql_signature' => TRUE,
-      'no_javascript' => TRUE,
     );
     $this->drupalPostForm('admin/structure/views/settings/advanced', $edit, t('Save configuration'));
 
     $this->assertFieldChecked('edit-skip-cache', 'The skip_cache option is checked.');
     $this->assertFieldChecked('edit-sql-signature', 'The sql_signature option is checked.');
-    $this->assertFieldChecked('edit-no-javascript', 'The no_javascript option is checked.');
 
     // Test the "Clear Views' cache" button.
     $this->drupalPostForm('admin/structure/views/settings/advanced', array(), t("Clear Views' cache"));

@@ -250,10 +250,22 @@ $config_directories = array();
  *
  * $settings contains environment-specific configuration, such as the files
  * directory and reverse proxy address, and temporary configuration, such as
- * turning on Twig debugging and security overrides.
+ * security overrides.
  *
  * @see \Drupal\Core\Site\Settings::get()
  */
+
+/**
+ * The active installation profile.
+ *
+ * Changing this after installation is not recommended as it changes which
+ * directories are scanned during extension discovery. If this is set prior to
+ * installation this value will be rewritten according to the profile selected
+ * by the user.
+ *
+ * @see install_select_profile()
+ */
+# $settings['install_profile'] = '';
 
 /**
  * Salt for one-time login links, cancel links, form tokens, etc.
@@ -371,18 +383,29 @@ $settings['update_free_access'] = FALSE;
 /**
  * Class Loader.
  *
- * By default, Composer's ClassLoader is used, which is best for development, as
- * it does not break when code is moved in the file system. You can decorate the
- * class loader with a cached solution for better performance, which is
- * recommended for production sites.
+ * If the APC extension is detected, the Symfony APC class loader is used for
+ * performance reasons. Detection can be prevented by setting
+ * class_loader_auto_detect to false, as in the example below.
+ */
+# $settings['class_loader_auto_detect'] = FALSE;
+
+/*
+ * If the APC extension is not detected, either because APC is missing or
+ * because auto-detection has been disabled, auto-loading falls back to
+ * Composer's ClassLoader, which is good for development as it does not break
+ * when code is moved in the file system. You can also decorate the base class
+ * loader with another cached solution than the Symfony APC class loader, as
+ * all production sites should have a cached class loader of some sort enabled.
  *
- * To do so, you may decorate and replace the local $class_loader variable.
- *
- * For example, to use Symfony's APC class loader, uncomment the code below.
+ * To do so, you may decorate and replace the local $class_loader variable. For
+ * example, to use Symfony's APC class loader without automatic detection,
+ * uncomment the code below.
  */
 /*
 if ($settings['hash_salt']) {
-  $apc_loader = new \Symfony\Component\ClassLoader\ApcClassLoader('drupal.' . $settings['hash_salt'], $class_loader);
+  $prefix = 'drupal.' . hash('sha256', 'drupal.' . $settings['hash_salt']);
+  $apc_loader = new \Symfony\Component\ClassLoader\ApcClassLoader($prefix, $class_loader);
+  unset($prefix);
   $class_loader->unregister();
   $apc_loader->register();
   $class_loader = $apc_loader;
@@ -414,14 +437,6 @@ if ($settings['hash_salt']) {
 # $settings['allow_authorize_operations'] = FALSE;
 
 /**
- * Mixed-mode sessions:
- *
- * Set to TRUE to create both secure and insecure sessions when using HTTPS.
- * Defaults to FALSE.
- */
-# $settings['mixed_mode_sessions'] = TRUE;
-
-/**
  * Default mode for for directories and files written by Drupal.
  *
  * Value should be in PHP Octal Notation, with leading zero.
@@ -437,6 +452,21 @@ if ($settings['hash_salt']) {
  * the Drupal installation directory and be accessible over the web.
  */
 # $settings['file_public_path'] = 'sites/default/files';
+
+/**
+ * Private file path:
+ *
+ * A local file system path where private files will be stored. This directory
+ * must be absolute, outside of the Drupal installation directory and not
+ * accessible over the web.
+ *
+ * Note: Caches need to be cleared when this value is changed to make the
+ * private:// stream wrapper available to the system.
+ *
+ * See http://drupal.org/documentation/modules/file for more information about
+ * securing private files.
+ */
+# $settings['file_private_path'] = '';
 
 /**
  * Session write interval:
@@ -510,30 +540,6 @@ if ($settings['hash_salt']) {
  */
 
 /**
- * Some distributions of Linux (most notably Debian) ship their PHP
- * installations with garbage collection (gc) disabled. Since Drupal depends on
- * PHP's garbage collection for clearing sessions, ensure that garbage
- * collection occurs by using the most common settings.
- */
-ini_set('session.gc_probability', 1);
-ini_set('session.gc_divisor', 100);
-
-/**
- * Set session lifetime (in seconds), i.e. the time from the user's last visit
- * to the active session may be deleted by the session garbage collector. When
- * a session is deleted, authenticated users are logged out, and the contents
- * of the user's $_SESSION variable is discarded.
- */
-ini_set('session.gc_maxlifetime', 200000);
-
-/**
- * Set session cookie lifetime (in seconds), i.e. the time from the session is
- * created to the cookie expires, i.e. when the browser is expected to discard
- * the cookie. The value 0 means "until the browser is closed".
- */
-ini_set('session.cookie_lifetime', 2000000);
-
-/**
  * If you encounter a situation where users post a large amount of text, and
  * the result is stripped out upon viewing but can still be edited, Drupal's
  * output filter may not have sufficient memory to process it.  If you
@@ -543,17 +549,6 @@ ini_set('session.cookie_lifetime', 2000000);
  */
 # ini_set('pcre.backtrack_limit', 200000);
 # ini_set('pcre.recursion_limit', 200000);
-
-/**
- * Drupal automatically generates a unique session cookie name for each site
- * based on its full domain name. If you have multiple domains pointing at the
- * same Drupal site, you can either redirect them all to a single domain (see
- * comment in .htaccess), or uncomment the line below and specify their shared
- * base domain. Doing so assures that users remain logged in as they cross
- * between your various domains. Make sure to always start the $cookie_domain
- * with a leading dot, as per RFC 2109.
- */
-# $cookie_domain = '.example.com';
 
 /**
  * Active configuration settings.
@@ -579,26 +574,22 @@ ini_set('session.cookie_lifetime', 2000000);
  * the default settings.php.
  *
  * Note that any values you provide in these variable overrides will not be
- * modifiable from the Drupal administration interface.
+ * viewable from the Drupal administration interface. The administration
+ * interface displays the values stored in configuration so that you can stage
+ * changes to other environments that don't have the overrides.
+ *
+ * There are particular configuration values that are risky to override. For
+ * example, overriding the list of installed modules in 'core.extension' is not
+ * supported as module install or uninstall has not occurred. Other examples
+ * include field storage configuration, because it has effects on database
+ * structure, and 'core.menu.static_menu_link_overrides' since this is cached in
+ * a way that is not config override aware. Also, note that changing
+ * configuration values in settings.php will not fire any of the configuration
+ * change events.
  */
 # $config['system.site']['name'] = 'My Drupal site';
 # $config['system.theme']['default'] = 'stark';
 # $config['user.settings']['anonymous'] = 'Visitor';
-
-/**
- * CSS/JS aggregated file gzip compression:
- *
- * By default, when CSS or JS aggregation and clean URLs are enabled Drupal will
- * store a gzip compressed (.gz) copy of the aggregated files. If this file is
- * available then rewrite rules in the default .htaccess file will serve these
- * files to browsers that accept gzip encoded content. This allows pages to load
- * faster for these users and has minimal impact on server load. If you are
- * using a webserver other than Apache httpd, or a caching reverse proxy that is
- * configured to cache and compress these files itself you may want to uncomment
- * one or both of the below lines, which will prevent gzip files being stored.
- */
-# $config['system.performance']['css']['gzip'] = FALSE;
-# $config['system.performance']['js']['gzip'] = FALSE;
 
 /**
  * Fast 404 pages:
@@ -625,6 +616,48 @@ ini_set('session.cookie_lifetime', 2000000);
 # $config['system.performance']['fast_404']['exclude_paths'] = '/\/(?:styles)\//';
 # $config['system.performance']['fast_404']['paths'] = '/\.(?:txt|png|gif|jpe?g|css|js|ico|swf|flv|cgi|bat|pl|dll|exe|asp)$/i';
 # $config['system.performance']['fast_404']['html'] = '<!DOCTYPE html><html><head><title>404 Not Found</title></head><body><h1>Not Found</h1><p>The requested URL "@path" was not found on this server.</p></body></html>';
+
+/**
+ * Load services definition file.
+ */
+$settings['container_yamls'][] = __DIR__ . '/services.yml';
+
+/**
+ * Trusted host configuration.
+ *
+ * Drupal core can use the Symfony trusted host mechanism to prevent HTTP Host
+ * header spoofing.
+ *
+ * To enable the trusted host mechanism, you enable your allowable hosts
+ * in $settings['trusted_host_patterns']. This should be an array of regular
+ * expression patterns, without delimiters, representing the hosts you would
+ * like to allow.
+ *
+ * For example:
+ * @code
+ * $settings['trusted_host_patterns'] = array(
+ *   '^www\.example\.com$',
+ * );
+ * @endcode
+ * will allow the site to only run from www.example.com.
+ *
+ * If you are running multisite, or if you are running your site from
+ * different domain names (eg, you don't redirect http://www.example.com to
+ * http://example.com), you should specify all of the host patterns that are
+ * allowed by your site.
+ *
+ * For example:
+ * @code
+ * $settings['trusted_host_patterns'] = array(
+ *   '^example\.com$',
+ *   '^.+\.example\.com$',
+ *   '^example\.org$',
+ *   '^.+\.example\.org$',
+ * );
+ * @endcode
+ * will allow the site to run off of all variants of example.com and
+ * example.org, with all subdomains included.
+ */
 
 /**
  * Load local development override configuration, if available.

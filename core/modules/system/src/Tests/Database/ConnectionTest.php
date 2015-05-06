@@ -75,7 +75,7 @@ class ConnectionTest extends DatabaseTestBase {
     // Open the default target so we have an object to compare.
     $db1 = Database::getConnection('default', 'default');
 
-    // Try to close the the default connection, then open a new one.
+    // Try to close the default connection, then open a new one.
     Database::closeConnection('default', 'default');
     $db2 = Database::getConnection('default', 'default');
 
@@ -116,6 +116,24 @@ class ConnectionTest extends DatabaseTestBase {
     // Get a fresh copy of the default connection options.
     $connectionOptions = $db->getConnectionOptions();
     $this->assertNotEqual($connection_info['default']['database'], $connectionOptions['database'], 'The test connection info database does not match the current connection options database.');
+  }
+
+  /**
+   * Ensure that you cannot execute multiple statements on phpversion() > 5.5.21 or > 5.6.5.
+   */
+  public function testMultipleStatementsForNewPhp() {
+    if (!defined('\PDO::MYSQL_ATTR_MULTI_STATEMENTS')) {
+      return;
+    }
+
+    $db = Database::getConnection('default', 'default');
+    try {
+      $db->query('SELECT * FROM {test}; SELECT * FROM {test_people}')->execute();
+      $this->fail('NO PDO exception thrown for multiple statements.');
+    }
+    catch (\Exception $e) {
+      $this->pass('PDO exception thrown for multiple statements.');
+    }
   }
 
 }

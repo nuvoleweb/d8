@@ -18,7 +18,8 @@ use Drupal\Core\Field\FieldStorageDefinitionInterface;
  *   id = "uuid",
  *   label = @Translation("UUID"),
  *   description = @Translation("An entity field containing a UUID."),
- *   no_ui = TRUE
+ *   no_ui = TRUE,
+ *   default_formatter = "string"
  * )
  */
 class UuidItem extends StringItem {
@@ -26,10 +27,10 @@ class UuidItem extends StringItem {
   /**
    * {@inheritdoc}
    */
-  public static function defaultSettings() {
+  public static function defaultStorageSettings() {
     return array(
       'max_length' => 128,
-    ) + parent::defaultSettings();
+    ) + parent::defaultStorageSettings();
   }
 
   /**

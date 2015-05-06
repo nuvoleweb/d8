@@ -27,8 +27,7 @@ class SystemAuthorizeTest extends WebTestBase {
     parent::setUp();
 
     // Create an administrator user.
-    $this->admin_user = $this->drupalCreateUser(array('administer software updates'));
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin ($this->drupalCreateUser(array('administer software updates')));
   }
 
   /**
@@ -59,5 +58,8 @@ class SystemAuthorizeTest extends WebTestBase {
     $this->assertRaw('System Test FileTransfer');
     // Make sure the settings form callback works.
     $this->assertText('System Test Username');
+    // Test that \Drupal\Core\Render\BareHtmlPageRenderer adds assets as
+    // expected to the first page of the authorize.php script.
+    $this->assertRaw('core/misc/states.js');
   }
 }

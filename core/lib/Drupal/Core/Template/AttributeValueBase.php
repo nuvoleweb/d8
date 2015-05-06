@@ -7,7 +7,7 @@
 
 namespace Drupal\Core\Template;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 
 /**
  * Defines the base class for an attribute type.
@@ -15,6 +15,13 @@ use Drupal\Component\Utility\String;
  * @see \Drupal\Core\Template\Attribute
  */
 abstract class AttributeValueBase {
+
+  /**
+   * Renders '$name=""' if $value is an empty string.
+   *
+   * @see \Drupal\Core\Template\AttributeValueBase::render()
+   */
+  const RENDER_EMPTY_ATTRIBUTE = TRUE;
 
   /**
    * The value itself.
@@ -48,9 +55,17 @@ abstract class AttributeValueBase {
    *   The string representation of the attribute.
    */
   public function render() {
-    if (isset($this->value)) {
-      return String::checkPlain($this->name) . '="' . $this . '"';
+    $value = (string) $this;
+    if (isset($this->value) && static::RENDER_EMPTY_ATTRIBUTE || !empty($value)) {
+      return SafeMarkup::checkPlain($this->name) . '="' . $value . '"';
     }
+  }
+
+  /**
+   * Returns the raw value.
+   */
+  public function value() {
+    return $this->value;
   }
 
   /**

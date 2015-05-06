@@ -8,6 +8,9 @@
 namespace Drupal\views\Entity\Render;
 
 use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\Core\Language\LanguageInterface;
+use Drupal\Core\Language\LanguageManagerInterface;
+use Drupal\views\Plugin\CacheablePluginInterface;
 use Drupal\views\Plugin\views\query\QueryPluginBase;
 use Drupal\views\ResultRow;
 use Drupal\views\ViewExecutable;
@@ -15,14 +18,21 @@ use Drupal\views\ViewExecutable;
 /**
  * Defines a base class for entity row renderers.
  */
-abstract class RendererBase {
+abstract class RendererBase implements CacheablePluginInterface {
 
   /**
    * The view executable wrapping the view storage entity.
    *
    * @var \Drupal\views\ViewExecutable
    */
-  public $view = NULL;
+  public $view;
+
+  /**
+   * The language manager.
+   *
+   * @var \Drupal\Core\Language\LanguageManagerInterface
+   */
+  protected $languageManager;
 
   /**
    * The type of the entity being rendered.
@@ -43,21 +53,51 @@ abstract class RendererBase {
    *
    * @param \Drupal\views\ViewExecutable $view
    *   The entity row being rendered.
+   * @param \Drupal\Core\Language\LanguageManagerInterface $language_manager
+   *   The language manager.
    * @param \Drupal\Core\Entity\EntityTypeInterface $entity_type
    *   The entity type.
    */
-  public function __construct(ViewExecutable $view, EntityTypeInterface $entity_type) {
+  public function __construct(ViewExecutable $view, LanguageManagerInterface $language_manager, EntityTypeInterface $entity_type) {
     $this->view = $view;
+    $this->languageManager = $language_manager;
     $this->entityType = $entity_type;
   }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isCacheable() {
+    return TRUE;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheContexts() {
+    return [];
+  }
+
+  /**
+   * Returns the language code associated to the given row.
+   *
+   * @param \Drupal\views\ResultRow $row
+   *   The result row.
+   *
+   * @return string
+   *   A language code.
+   */
+  abstract public function getLangcode(ResultRow $row);
 
   /**
    * Alters the query if needed.
    *
    * @param \Drupal\views\Plugin\views\query\QueryPluginBase $query
    *   The query to alter.
+   * @param string $relationship
+   *   (optional) The relationship, used by a field.
    */
-  public function query(QueryPluginBase $query) {
+  public function query(QueryPluginBase $query, $relationship = NULL) {
   }
 
   /**

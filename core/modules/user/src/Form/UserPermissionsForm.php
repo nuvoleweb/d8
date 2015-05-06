@@ -7,7 +7,7 @@
 
 namespace Drupal\user\Form;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\user\PermissionHandlerInterface;
@@ -79,11 +79,13 @@ class UserPermissionsForm extends FormBase {
   public function buildForm(array $form, FormStateInterface $form_state) {
     $role_names = array();
     $role_permissions = array();
+    $admin_roles = array();
     foreach ($this->getRoles() as $role_name => $role) {
       // Retrieve role names for columns.
-      $role_names[$role_name] = String::checkPlain($role->label());
+      $role_names[$role_name] = SafeMarkup::checkPlain($role->label());
       // Fetch permissions for the roles.
       $role_permissions[$role_name] = $role->getPermissions();
+      $admin_roles[$role_name] = $role->isAdmin();
     }
 
     // Store $role_names for use when saving the data.
@@ -97,13 +99,15 @@ class UserPermissionsForm extends FormBase {
     $hide_descriptions = system_admin_compact_mode();
 
     $form['system_compact_link'] = array(
-      '#theme' => 'system_compact_link',
+      '#id' => FALSE,
+      '#type' => 'system_compact_link',
     );
 
     $form['permissions'] = array(
       '#type' => 'table',
       '#header' => array($this->t('Permission')),
       '#id' => 'permissions',
+      '#attributes' => ['class' => ['permissions']],
       '#sticky' => TRUE,
     );
     foreach ($role_names as $name) {
@@ -137,22 +141,18 @@ class UserPermissionsForm extends FormBase {
           'warning' => !empty($perm_item['restrict access']) ? $this->t('Warning: Give to trusted roles only; this permission has security implications.') : '',
         );
         $options[$perm] = $perm_item['title'];
+        $form['permissions'][$perm]['description'] = array(
+          '#type' => 'inline_template',
+          '#template' => '<div class="permission"><span class="title">{{ title }}</span>{% if description or warning %}<div class="description">{% if warning %}<em class="permission-warning">{{ warning }}</em> {% endif %}{{ description }}</div>{% endif %}</div>',
+          '#context' => array(
+            'title' => $perm_item['title'],
+          ),
+        );
         // Show the permission description.
         if (!$hide_descriptions) {
-          $user_permission_description = $perm_item['description'];
-          // Append warning message.
-          if (!empty($perm_item['warning'])) {
-            $user_permission_description .= ' <em class="permission-warning">' . $perm_item['warning'] . '</em>';
-          }
+          $form['permissions'][$perm]['description']['#context']['description'] = $perm_item['description'];
+          $form['permissions'][$perm]['description']['#context']['warning'] = $perm_item['warning'];
         }
-        $form['permissions'][$perm]['description'] = array(
-          '#wrapper_attributes' => array(
-            'class' => array('permission'),
-          ),
-          '#type' => 'item',
-          '#markup' => $perm_item['title'],
-          '#description' => $user_permission_description,
-        );
         $options[$perm] = '';
         foreach ($role_names as $rid => $name) {
           $form['permissions'][$perm][$rid] = array(
@@ -166,12 +166,21 @@ class UserPermissionsForm extends FormBase {
             '#attributes' => array('class' => array('rid-' . $rid)),
             '#parents' => array($rid, $perm),
           );
+          // Show a column of disabled but checked checkboxes.
+          if ($admin_roles[$rid]) {
+            $form['permissions'][$perm][$rid]['#disabled'] = TRUE;
+            $form['permissions'][$perm][$rid]['#default_value'] = TRUE;
+          }
         }
       }
     }
 
     $form['actions'] = array('#type' => 'actions');
-    $form['actions']['submit'] = array('#type' => 'submit', '#value' => $this->t('Save permissions'));
+    $form['actions']['submit'] = array(
+      '#type' => 'submit',
+      '#value' => $this->t('Save permissions'),
+      '#button_type' => 'primary',
+    );
 
     $form['#attached']['library'][] = 'user/drupal.user.permissions';
 
@@ -183,7 +192,7 @@ class UserPermissionsForm extends FormBase {
    */
   function submitForm(array &$form, FormStateInterface $form_state) {
     foreach ($form_state->getValue('role_names') as $role_name => $name) {
-      user_role_change_permissions($role_name, $form_state->getValue($role_name));
+      user_role_change_permissions($role_name, (array) $form_state->getValue($role_name));
     }
 
     drupal_set_message($this->t('The changes have been saved.'));

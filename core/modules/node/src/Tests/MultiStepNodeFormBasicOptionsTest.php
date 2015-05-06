@@ -6,6 +6,7 @@
  */
 
 namespace Drupal\node\Tests;
+use Drupal\Component\Utility\Unicode;
 
 /**
  * Tests the persistence of basic options through multiple steps.
@@ -19,7 +20,7 @@ class MultiStepNodeFormBasicOptionsTest extends NodeTestBase {
    *
    * @var string
    */
-  protected $field_name;
+  protected $fieldName;
 
   /**
    * Tests changing the default values of basic options to ensure they persist.
@@ -30,23 +31,23 @@ class MultiStepNodeFormBasicOptionsTest extends NodeTestBase {
     $this->drupalLogin($web_user);
 
     // Create an unlimited cardinality field.
-    $this->field_name = drupal_strtolower($this->randomMachineName());
+    $this->fieldName = Unicode::strtolower($this->randomMachineName());
     entity_create('field_storage_config', array(
-      'name' => $this->field_name,
+      'field_name' => $this->fieldName,
       'entity_type' => 'node',
       'type' => 'text',
       'cardinality' => -1,
     ))->save();
 
     // Attach an instance of the field to the page content type.
-    entity_create('field_instance_config', array(
-      'field_name' => $this->field_name,
+    entity_create('field_config', array(
+      'field_name' => $this->fieldName,
       'entity_type' => 'node',
       'bundle' => 'page',
       'label' => $this->randomMachineName() . '_label',
     ))->save();
     entity_get_form_display('node', 'page', 'default')
-      ->setComponent($this->field_name, array(
+      ->setComponent($this->fieldName, array(
         'type' => 'text_textfield',
       ))
       ->save();
@@ -55,7 +56,7 @@ class MultiStepNodeFormBasicOptionsTest extends NodeTestBase {
       'title[0][value]' => 'a',
       'promote[value]' => FALSE,
       'sticky[value]' => 1,
-      "{$this->field_name}[0][value]" => $this->randomString(32),
+      "{$this->fieldName}[0][value]" => $this->randomString(32),
     );
     $this->drupalPostForm('node/add/page', $edit, t('Add another item'));
     $this->assertNoFieldChecked('edit-promote-value', 'Promote stayed unchecked');

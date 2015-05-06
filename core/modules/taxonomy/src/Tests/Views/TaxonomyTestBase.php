@@ -9,6 +9,7 @@ namespace Drupal\taxonomy\Tests\Views;
 
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\Language\LanguageInterface;
+use Drupal\entity_reference\Tests\EntityReferenceTestTrait;
 use Drupal\views\Tests\ViewTestBase;
 use Drupal\views\Tests\ViewTestData;
 
@@ -16,6 +17,8 @@ use Drupal\views\Tests\ViewTestData;
  * Base class for all taxonomy tests.
  */
 abstract class TaxonomyTestBase extends ViewTestBase {
+
+  use EntityReferenceTestTrait;
 
   /**
    * Modules to enable.
@@ -27,21 +30,28 @@ abstract class TaxonomyTestBase extends ViewTestBase {
   /**
    * Stores the nodes used for the different tests.
    *
-   * @var array
+   * @var \Drupal\node\NodeInterface[]
    */
   protected $nodes = array();
 
   /**
+   * The vocabulary used for creating terms.
+   *
+   * @var \Drupal\taxonomy\VocabularyInterface
+   */
+  protected $vocabulary;
+
+  /**
    * Stores the first term used in the different tests.
    *
-   * @var \Drupal\taxonomy\Term
+   * @var \Drupal\taxonomy\TermInterface
    */
   protected $term1;
 
   /**
    * Stores the second term used in the different tests.
    *
-   * @var \Drupal\taxonomy\Term
+   * @var \Drupal\taxonomy\TermInterface
    */
   protected $term2;
 
@@ -77,45 +87,32 @@ abstract class TaxonomyTestBase extends ViewTestBase {
       'vid' => 'views_testing_tags',
     ));
     $this->vocabulary->save();
-    $this->field_name = 'field_' . $this->vocabulary->id();
-    entity_create('field_storage_config', array(
-      'name' => $this->field_name,
-      'entity_type' => 'node',
-      'type' => 'taxonomy_term_reference',
-      // Set cardinality to unlimited for tagging.
-      'cardinality' => FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED,
-      'settings' => array(
-        'allowed_values' => array(
-          array(
-            'vocabulary' => $this->vocabulary->id(),
-            'parent' => 0,
-          ),
-        ),
+    $field_name = 'field_' . $this->vocabulary->id();
+
+    $handler_settings = array(
+      'target_bundles' => array(
+        $this->vocabulary->id() => $this->vocabulary->id(),
       ),
-    ))->save();
-    entity_create('field_instance_config', array(
-      'field_name' => $this->field_name,
-      'entity_type' => 'node',
-      'label' => 'Tags',
-      'bundle' => 'article',
-    ))->save();
+      'auto_create' => TRUE,
+    );
+    $this->createEntityReferenceField('node', 'article', $field_name, 'Tags', 'taxonomy_term', 'default', $handler_settings, FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED);
 
     entity_get_form_display('node', 'article', 'default')
-      ->setComponent($this->field_name, array(
-        'type' => 'taxonomy_autocomplete',
+      ->setComponent($field_name, array(
+        'type' => 'entity_reference_autocomplete_tags',
         'weight' => -4,
       ))
       ->save();
 
     entity_get_display('node', 'article', 'default')
-      ->setComponent($this->field_name, array(
-        'type' => 'taxonomy_term_reference_link',
+      ->setComponent($field_name, array(
+        'type' => 'entity_reference_label',
         'weight' => 10,
       ))
       ->save();
     entity_get_display('node', 'article', 'teaser')
-      ->setComponent($this->field_name, array(
-        'type' => 'taxonomy_term_reference_link',
+      ->setComponent($field_name, array(
+        'type' => 'entity_reference_label',
         'weight' => 10,
       ))
       ->save();
@@ -124,20 +121,24 @@ abstract class TaxonomyTestBase extends ViewTestBase {
   /**
    * Returns a new term with random properties in vocabulary $vid.
    *
-   * @return \Drupal\taxonomy\Term
+   * @param array $settings
+   *   (Optional) An associative array of settings to pass to `entity_create`.
+   *
+   * @return \Drupal\taxonomy\Entity\Term
    *   The created taxonomy term.
    */
-  protected function createTerm() {
+  protected function createTerm(array $settings = []) {
     $filter_formats = filter_formats();
     $format = array_pop($filter_formats);
-    $term = entity_create('taxonomy_term', array(
+    $settings += [
       'name' => $this->randomMachineName(),
       'description' => $this->randomMachineName(),
       // Use the first available text format.
-      'format' => $format->format,
+      'format' => $format->id(),
       'vid' => $this->vocabulary->id(),
       'langcode' => LanguageInterface::LANGCODE_NOT_SPECIFIED,
-    ));
+    ];
+    $term = entity_create('taxonomy_term', $settings);
     $term->save();
     return $term;
   }

@@ -8,8 +8,8 @@
 namespace Drupal\aggregator\Plugin\views\argument;
 
 use Drupal\Core\Entity\EntityManagerInterface;
-use Drupal\views\Plugin\views\argument\Numeric;
-use Drupal\Component\Utility\String;
+use Drupal\views\Plugin\views\argument\NumericArgument;
+use Drupal\Component\Utility\SafeMarkup;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -19,10 +19,10 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  *
  * @ViewsArgument("aggregator_fid")
  */
-class Fid extends Numeric {
+class Fid extends NumericArgument {
 
   /**
-   * The entity manager service
+   * The entity manager service.
    *
    * @var \Drupal\Core\Entity\EntityManagerInterface
    */
@@ -55,12 +55,12 @@ class Fid extends Numeric {
   /**
    * {@inheritdoc}
    */
-  function titleQuery() {
+  public function titleQuery() {
     $titles = array();
 
     $feeds = $this->entityManager->getStorage('aggregator_feed')->loadMultiple($this->value);
     foreach ($feeds as $feed) {
-      $titles[] = String::checkPlain($feed->label());
+      $titles[] = SafeMarkup::checkPlain($feed->label());
     }
     return $titles;
   }

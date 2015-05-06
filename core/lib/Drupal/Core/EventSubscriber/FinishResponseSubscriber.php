@@ -8,9 +8,13 @@
 namespace Drupal\Core\EventSubscriber;
 
 use Drupal\Component\Datetime\DateTimePlus;
+use Drupal\Core\Cache\CacheableResponseInterface;
+use Drupal\Core\Cache\CacheContextsManager;
 use Drupal\Core\Config\Config;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Language\LanguageManagerInterface;
+use Drupal\Core\PageCache\RequestPolicyInterface;
+use Drupal\Core\PageCache\ResponsePolicyInterface;
 use Drupal\Core\Site\Settings;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -41,16 +45,46 @@ class FinishResponseSubscriber implements EventSubscriberInterface {
   protected $config;
 
   /**
+   * A policy rule determining the cacheability of a request.
+   *
+   * @var \Drupal\Core\PageCache\RequestPolicyInterface
+   */
+  protected $requestPolicy;
+
+  /**
+   * A policy rule determining the cacheability of the response.
+   *
+   * @var \Drupal\Core\PageCache\ResponsePolicyInterface
+   */
+  protected $responsePolicy;
+
+  /**
+   * The cache contexts manager service.
+   *
+   * @var \Drupal\Core\Cache\CacheContextsManager
+   */
+  protected $cacheContexts;
+
+  /**
    * Constructs a FinishResponseSubscriber object.
    *
    * @param \Drupal\Core\Language\LanguageManagerInterface $language_manager
    *   The language manager object for retrieving the correct language code.
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   A config factory for retrieving required config objects.
+   * @param \Drupal\Core\PageCache\RequestPolicyInterface $request_policy
+   *   A policy rule determining the cacheability of a request.
+   * @param \Drupal\Core\PageCache\ResponsePolicyInterface $response_policy
+   *   A policy rule determining the cacheability of a response.
+   * @param \Drupal\Core\Cache\CacheContextsManager $cache_contexts_manager
+   *   The cache contexts manager service.
    */
-  public function __construct(LanguageManagerInterface $language_manager, ConfigFactoryInterface $config_factory) {
+  public function __construct(LanguageManagerInterface $language_manager, ConfigFactoryInterface $config_factory, RequestPolicyInterface $request_policy, ResponsePolicyInterface $response_policy, CacheContextsManager $cache_contexts_manager) {
     $this->languageManager = $language_manager;
     $this->config = $config_factory->get('system.performance');
+    $this->requestPolicy = $request_policy;
+    $this->responsePolicy = $response_policy;
+    $this->cacheContextsManager = $cache_contexts_manager;
   }
 
   /**
@@ -60,7 +94,7 @@ class FinishResponseSubscriber implements EventSubscriberInterface {
    *   The event to process.
    */
   public function onRespond(FilterResponseEvent $event) {
-    if ($event->getRequestType() !== HttpKernelInterface::MASTER_REQUEST) {
+    if (!$event->isMasterRequest()) {
       return;
     }
 
@@ -68,43 +102,59 @@ class FinishResponseSubscriber implements EventSubscriberInterface {
     $response = $event->getResponse();
 
     // Set the X-UA-Compatible HTTP header to force IE to use the most recent
-    // rendering engine or use Chrome's frame rendering engine if available.
-    $response->headers->set('X-UA-Compatible', 'IE=edge,chrome=1', FALSE);
+    // rendering engine.
+    $response->headers->set('X-UA-Compatible', 'IE=edge', FALSE);
 
     // Set the Content-language header.
-    $response->headers->set('Content-language', $this->languageManager->getCurrentLanguage()->id);
+    $response->headers->set('Content-language', $this->languageManager->getCurrentLanguage()->getId());
+
+    // Prevent browsers from sniffing a response and picking a MIME type
+    // different from the declared content-type, since that can lead to
+    // XSS and other vulnerabilities.
+    // https://www.owasp.org/index.php/List_of_useful_HTTP_headers
+    $response->headers->set('X-Content-Type-Options', 'nosniff', FALSE);
 
     // Attach globally-declared headers to the response object so that Symfony
     // can send them for us correctly.
-    // @todo remove this once we have removed all drupal_add_http_header()
-    //   calls.
+    // @todo Remove this once drupal_process_attached() no longer calls
+    //    _drupal_add_http_header(), which has its own static. Instead,
+    //    _drupal_process_attached() should use
+    //    \Symfony\Component\HttpFoundation\Response->headers->set(), which is
+    //    already documented on the (deprecated) _drupal_process_attached() to
+    //    become the final, intended mechanism.
     $headers = drupal_get_http_header();
     foreach ($headers as $name => $value) {
+      // Symfony special-cases the 'Status' header.
+      if ($name === 'status') {
+        $response->setStatusCode($value);
+      }
       $response->headers->set($name, $value, FALSE);
     }
 
-    $is_cacheable = drupal_page_is_cacheable();
+    // Expose the cache contexts and cache tags associated with this page in a
+    // X-Drupal-Cache-Contexts and X-Drupal-Cache-Tags header respectively.
+    if ($response instanceof CacheableResponseInterface) {
+      $response_cacheability = $response->getCacheableMetadata();
+      $response->headers->set('X-Drupal-Cache-Tags', implode(' ', $response_cacheability->getCacheTags()));
+      $response->headers->set('X-Drupal-Cache-Contexts', implode(' ', $this->cacheContextsManager->optimizeTokens($response_cacheability->getCacheContexts())));
+    }
+
+    $is_cacheable = ($this->requestPolicy->check($request) === RequestPolicyInterface::ALLOW) && ($this->responsePolicy->check($response, $request) !== ResponsePolicyInterface::DENY);
 
     // Add headers necessary to specify whether the response should be cached by
     // proxies and/or the browser.
     if ($is_cacheable && $this->config->get('cache.page.max_age') > 0) {
       if (!$this->isCacheControlCustomized($response)) {
+        // Only add the default Cache-Control header if the controller did not
+        // specify one on the response.
         $this->setResponseCacheable($response, $request);
       }
     }
     else {
+      // If either the policy forbids caching or the sites configuration does
+      // not allow to add a max-age directive, then enforce a Cache-Control
+      // header declaring the response as not cacheable.
       $this->setResponseNotCacheable($response, $request);
-    }
-
-    // Currently it is not possible to cache some types of responses. Therefore
-    // exclude binary file responses (generated files, e.g. images with image
-    // styles) and streamed responses (files directly read from the disk).
-    // see: https://github.com/symfony/symfony/issues/9128#issuecomment-25088678
-    if ($is_cacheable && $this->config->get('cache.page.use_internal') && !($response instanceof BinaryFileResponse) && !($response instanceof StreamedResponse)) {
-      // Store the response in the internal page cache.
-      drupal_page_set_cache($response, $request);
-      $response->headers->set('X-Drupal-Cache', 'MISS');
-      drupal_serve_page_from_cache($response, $request);
     }
   }
 

@@ -22,4 +22,13 @@ interface EntityDisplayModeInterface extends ConfigEntityInterface {
    */
   public function getTargetType();
 
+  /**
+   * Set the entity type this display mode is used for.
+   *
+   * @param string $target_entity_type
+   *   The target entity type for this display mode.
+   *
+   * @return $this
+   */
+  public function setTargetType($target_entity_type);
 }

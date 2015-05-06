@@ -18,17 +18,27 @@ use Drupal\menu_link_content\Entity\MenuLinkContent;
 class MenuNodeTest extends WebTestBase {
 
   /**
+   * An editor user.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $editor;
+
+  /**
    * Modules to enable.
    *
    * @var array
    */
-  public static $modules = array('menu_ui', 'test_page_test', 'node');
+  public static $modules = array('menu_ui', 'test_page_test', 'node', 'block');
 
   protected function setUp() {
     parent::setUp();
+
+    $this->drupalPlaceBlock('system_menu_block:main');
+
     $this->drupalCreateContentType(array('type' => 'page', 'name' => 'Basic page'));
 
-    $this->admin_user = $this->drupalCreateUser(array(
+    $this->editor = $this->drupalCreateUser(array(
       'access administration pages',
       'administer content types',
       'administer menu',
@@ -36,7 +46,7 @@ class MenuNodeTest extends WebTestBase {
       'edit any page content',
       'delete any page content',
     ));
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->editor);
   }
 
   /**
@@ -81,6 +91,14 @@ class MenuNodeTest extends WebTestBase {
     $this->drupalPostForm('admin/structure/types/manage/page', $edit, t('Save content type'));
     $this->assertRaw(t('The content type %name has been updated.', array('%name' => 'Basic page')));
 
+    // Test that we can preview a node that will create a menu item.
+    $edit = array(
+      'title[0][value]' => $node_title,
+      'menu[enabled]' => 1,
+      'menu[title]' => 'Test preview',
+    );
+    $this->drupalPostForm('node/add/page', $edit, t('Preview'));
+
     // Create a node.
     $node_title = $this->randomMachineName();
     $edit = array(
@@ -102,6 +120,36 @@ class MenuNodeTest extends WebTestBase {
     $this->drupalGet('test-page');
     $this->assertNoLink($node_title);
 
+    // Use not only the save button, but also the two special buttons:
+    // 'Save and publish' as well as 'Save and keep published'.
+    // These buttons just appear for 'administer nodes' users.
+    $admin_user = $this->drupalCreateUser([
+      'access administration pages',
+      'administer content types',
+      'administer nodes',
+      'administer menu',
+      'create page content',
+      'edit any page content',
+    ]);
+    $this->drupalLogin($admin_user);
+    foreach ([t('Save and unpublish') => FALSE, t('Save and keep unpublished') => FALSE, t('Save and publish') => TRUE, t('Save and keep published') => TRUE] as $submit => $visible) {
+      $edit = [
+        'menu[enabled]' => 1,
+        'menu[title]' => $node_title,
+      ];
+      $this->drupalPostForm('node/' . $node->id() . '/edit', $edit, $submit);
+      // Assert that the link exists.
+      $this->drupalGet('test-page');
+      if ($visible) {
+        $this->assertLink($node_title, 0, 'Found a menu link after submitted with ' . $submit);
+      }
+      else {
+        $this->assertNoLink($node_title, 'Found no menu link after submitted with ' . $submit);
+      }
+    }
+
+    // Log back in as normal user.
+    $this->drupalLogin($this->editor);
     // Edit the node and create a menu link.
     $edit = array(
       'menu[enabled]' => 1,
@@ -127,11 +175,9 @@ class MenuNodeTest extends WebTestBase {
 
     // Add a menu link to the Administration menu.
     $item = entity_create('menu_link_content', array(
-      'route_name' => 'entity.node.canonical',
-      'route_parameters' => array('node' => $node->id()),
+      'link' => [['uri' => 'entity:node/' . $node->id()]],
       'title' => $this->randomMachineName(16),
       'menu_name' => 'admin',
-      'bundle' => 'menu_link_content',
     ));
     $item->save();
 
@@ -151,12 +197,10 @@ class MenuNodeTest extends WebTestBase {
     $child_node = $this->drupalCreateNode(array('type' => 'article'));
     // Assign a menu link to the second node, being a child of the first one.
     $child_item = entity_create('menu_link_content', array(
-      'route_name' => 'entity.node.canonical',
-      'route_parameters' => array('node' => $child_node->id()),
+      'link' => [['uri' => 'entity:node/' . $child_node->id()]],
       'title' => $this->randomMachineName(16),
       'parent' => $item->getPluginId(),
       'menu_name' => $item->getMenuName(),
-      'bundle' => 'menu_link_content',
     ));
     $child_item->save();
     // Edit the first node.

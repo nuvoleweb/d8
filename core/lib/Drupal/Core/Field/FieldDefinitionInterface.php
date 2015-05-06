@@ -7,7 +7,8 @@
 
 namespace Drupal\Core\Field;
 
-use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Cache\CacheableDependencyInterface;
+use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\TypedData\ListDataDefinitionInterface;
 
 /**
@@ -28,16 +29,16 @@ use Drupal\Core\TypedData\ListDataDefinitionInterface;
  * information comes from. For example, field.module provides an implementation
  * based on two levels of configuration. It allows the site administrator to add
  * custom fields to any entity type and bundle via the "field_storage_config"
- * and "field_instance_config" configuration entities. The former for storing
+ * and "field_config" configuration entities. The former for storing
  * configuration that is independent of which entity type and bundle the field
  * is added to, and the latter for storing configuration that is specific to the
- * entity type and bundle. The class that implements "field_instance_config"
+ * entity type and bundle. The class that implements "field_config"
  * configuration entities also implements this interface, returning information
  * from either itself, or from the corresponding "field_storage_config"
  * configuration, as appropriate.
  *
  * However, entity base fields, such as $node->title, are not managed by
- * field.module and its "field_storage_config"/"field_instance_config"
+ * field.module and its "field_storage_config"/"field_config"
  * configuration entities. Therefore, their definitions are provided by
  * different objects based on the class \Drupal\Core\Field\BaseFieldDefinition,
  * which implements this interface as well.
@@ -52,7 +53,7 @@ use Drupal\Core\TypedData\ListDataDefinitionInterface;
  * based on that abstract definition, even though that abstract definition can
  * differ from the concrete definition of any particular node's body field.
  */
-interface FieldDefinitionInterface extends ListDataDefinitionInterface {
+interface FieldDefinitionInterface extends ListDataDefinitionInterface, CacheableDependencyInterface {
 
   /**
    * Returns the machine name of the field.
@@ -76,13 +77,39 @@ interface FieldDefinitionInterface extends ListDataDefinitionInterface {
   public function getType();
 
   /**
-   * Gets the bundle the field is defined for.
+   * Returns the ID of the entity type the field is attached to.
+   *
+   * This method should not be confused with EntityInterface::getEntityTypeId()
+   * (configurable fields are config entities, and thus implement both
+   * interfaces):
+   *   - FieldDefinitionInterface::getTargetEntityTypeId() answers "as a field,
+   *     which entity type are you attached to?".
+   *   - EntityInterface::getEntityTypeId() answers "as a (config) entity, what
+   *     is your own entity type?".
+   *
+   * @return string
+   *   The entity type ID.
+   */
+  public function getTargetEntityTypeId();
+
+  /**
+   * Gets the bundle the field is attached to.
+   *
+   * This method should not be confused with EntityInterface::bundle()
+   * (configurable fields are config entities, and thus implement both
+   * interfaces):
+   *   - FieldDefinitionInterface::getTargetBundle() answers "as a field,
+   *     which bundle are you attached to?".
+   *   - EntityInterface::bundle() answers "as a (config) entity, what
+   *     is your own bundle?" (not relevant in our case, the config entity types
+   *     used to store the definitions of configurable fields do not have
+   *     bundles).
    *
    * @return string|null
    *   The bundle the field is defined for, or NULL if it is a base field; i.e.,
    *   it is not bundle-specific.
    */
-  public function getBundle();
+  public function getTargetBundle();
 
   /**
    * Returns whether the display for the field can be configured.
@@ -133,33 +160,35 @@ interface FieldDefinitionInterface extends ListDataDefinitionInterface {
   public function getDisplayOptions($display_context);
 
   /**
-   * Returns whether at least one non-empty item is required for this field.
+   * Returns whether the field can be empty.
    *
-   * Currently, required-ness is only enforced at the Form API level in entity
-   * edit forms, not during direct API saves.
+   * If a field is required, an entity needs to have at least a valid,
+   * non-empty item in that field's FieldItemList in order to pass validation.
+   *
+   * An item is considered empty if its isEmpty() method returns TRUE.
+   * Typically, that is if at least one of its required properties is empty.
    *
    * @return bool
    *   TRUE if the field is required.
+   *
+   * @see \Drupal\Core\TypedData\Plugin\DataType\ItemList::isEmpty()
+   * @see \Drupal\Core\Field\FieldItemInterface::isEmpty()
+   * @see \Drupal\Core\TypedData\DataDefinitionInterface:isRequired()
+   * @see \Drupal\Core\TypedData\TypedDataManager::getDefaultConstraints()
    */
   public function isRequired();
 
   /**
    * Returns the default value for the field in a newly created entity.
    *
-   * @param \Drupal\Core\Entity\ContentEntityInterface $entity
+   * @param \Drupal\Core\Entity\FieldableEntityInterface $entity
    *   The entity for which the default value is generated.
    *
-   * @return mixed
-   *   The default value for the field, as accepted by
-   *   \Drupal\field\Plugin\Core\Entity\FieldItemListInterface::setValue(). This
-   *   can be either:
-   *   - a literal, in which case it will be assigned to the first property of
-   *     the first item.
-   *   - a numerically indexed array of items, each item being a property/value
-   *     array.
-   *   - NULL or array() for no default value.
+   * @return array
+   *   The default value for the field, as a numerically indexed array of items,
+   *   each item being a property/value array (array() for no default value).
    */
-  public function getDefaultValue(ContentEntityInterface $entity);
+  public function getDefaultValue(FieldableEntityInterface $entity);
 
   /**
    * Returns whether the field is translatable.

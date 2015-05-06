@@ -27,32 +27,47 @@ class HandlerFieldUserNameTest extends UserTestBase {
   public function testUserName() {
     $this->drupalLogin($this->drupalCreateUser(array('access user profiles')));
 
+    // Set defaults.
     $view = Views::getView('test_views_handler_field_user_name');
+    $view->initHandlers();
+    $view->field['name']->options['link_to_user'] = TRUE;
+    $view->field['name']->options['type'] = 'user_name';
+    $view->field['name']->init($view, $view->getDisplay('default'));
     $this->executeView($view);
 
-    $view->field['name']->options['link_to_user'] = TRUE;
-    $username = $view->result[0]->users_field_data_name = $this->randomMachineName();
-    $view->result[0]->users_field_data_uid = 1;
+    $anon_name = $this->config('user.settings')->get('anonymous');
+    $render = $view->field['name']->advancedRender($view->result[0]);
+    $this->assertTrue(strpos($render, $anon_name) !== FALSE, 'For user 0 it should use the default anonymous name by default.');
+
+    $username = $this->randomMachineName();
+    $view->result[0]->_entity->setUsername($username);
+    $view->result[0]->_entity->uid->value = 1;
     $render = $view->field['name']->advancedRender($view->result[0]);
     $this->assertTrue(strpos($render, $username) !== FALSE, 'If link to user is checked the username should be part of the output.');
     $this->assertTrue(strpos($render, 'user/1') !== FALSE, 'If link to user is checked the link to the user should appear as well.');
 
     $view->field['name']->options['link_to_user'] = FALSE;
-    $username = $view->result[0]->users_field_data_name = $this->randomMachineName();
-    $view->result[0]->users_field_data_uid = 1;
+    $view->field['name']->options['type'] = 'string';
+    $username = $this->randomMachineName();
+    $view->result[0]->_entity->setUsername($username);
+    $view->result[0]->_entity->uid->value = 1;
     $render = $view->field['name']->advancedRender($view->result[0]);
     $this->assertIdentical($render, $username, 'If the user is not linked the username should be printed out for a normal user.');
 
-    $view->result[0]->users_field_data_uid = 0;
-    $anon_name = \Drupal::config('user.settings')->get('anonymous');
-    $view->result[0]->users_field_data_name = '';
-    $render = $view->field['name']->advancedRender($view->result[0]);
-    $this->assertIdentical($render, $anon_name , 'For user0 it should use the default anonymous name by default.');
+  }
 
-    $view->field['name']->options['overwrite_anonymous'] = TRUE;
-    $anon_name = $view->field['name']->options['anonymous_text'] = $this->randomMachineName();
+  /**
+   * Tests that the field handler works when no additional fields are added.
+   */
+  public function testNoAdditionalFields() {
+    $view = Views::getView('test_views_handler_field_user_name');
+    $this->executeView($view);
+
+    $username = $this->randomMachineName();
+    $view->result[0]->_entity->setUsername($username);
+    $view->result[0]->_entity->uid->value = 1;
     $render = $view->field['name']->advancedRender($view->result[0]);
-    $this->assertIdentical($render, $anon_name , 'For user0 it should use the configured anonymous text if overwrite_anonymous is checked.');
+    $this->assertTrue(strpos($render, $username) !== FALSE, 'If link to user is checked the username should be part of the output.');
   }
 
 }

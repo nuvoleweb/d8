@@ -7,7 +7,6 @@
 
 namespace Drupal\Core\Entity\Plugin\Validation\Constraint;
 
-use Drupal\Core\Entity\EntityInterface;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\ConstraintValidator;
 
@@ -17,13 +16,17 @@ use Symfony\Component\Validator\ConstraintValidator;
 class EntityTypeConstraintValidator extends ConstraintValidator {
 
   /**
-   * Implements \Symfony\Component\Validator\ConstraintValidatorInterface::validate().
+   * {@inheritdoc}
    */
   public function validate($entity, Constraint $constraint) {
+    if (!isset($entity)) {
+      return;
+    }
 
     /** @var $entity \Drupal\Core\Entity\EntityInterface */
-    if (!empty($entity) && $entity->getEntityTypeId() != $constraint->type) {
+    if ($entity->getEntityTypeId() != $constraint->type) {
       $this->context->addViolation($constraint->message, array('%type' => $constraint->type));
     }
   }
+
 }

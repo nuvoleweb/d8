@@ -7,7 +7,7 @@
 
 namespace Drupal\Core\Database\Driver\fake;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Database\Query\Condition;
 use Drupal\Core\Database\Query\PlaceholderInterface;
@@ -180,7 +180,7 @@ class FakeSelect extends Select {
     $fields = array();
     foreach ($this->fields as $field_info) {
       $this->fieldsWithTable[$field_info['table'] . '.' . $field_info['field']] = $field_info;
-      $fields[$field_info['table']][$field_info['field']] = NULL;
+      $fields[$field_info['table']][$field_info['field']] = $field_info['alias'];
     }
     foreach ($this->tables as $alias => $table_info) {
       if ($table = reset($this->databaseContents[$table_info['table']])) {
@@ -256,8 +256,8 @@ class FakeSelect extends Select {
    */
   protected function getNewRow($table_alias, $fields, $candidate_row, $row = array()) {
     $new_row[$table_alias]['all'] = $candidate_row;
-    foreach ($fields[$table_alias] as $field => $v) {
-      $new_row[$table_alias]['result'][$field] = $candidate_row[$field];
+    foreach ($fields[$table_alias] as $field => $alias) {
+      $new_row[$table_alias]['result'][$alias] = $candidate_row[$field];
     }
     return $new_row + $row;
   }
@@ -514,17 +514,6 @@ class FakeSelect extends Select {
   /**
    * {@inheritdoc}
    */
-  public static function getInfo() {
-    return array(
-      'name' => 'Fake select test',
-      'description' => 'Tests for fake select plugin.',
-      'group' => 'Migrate',
-    );
-  }
-
-  /**
-   * {@inheritdoc}
-   */
   public function fields($table_alias, array $fields = array()) {
     if (!$fields) {
       $table = $this->tables[$table_alias]['table'];
@@ -532,7 +521,7 @@ class FakeSelect extends Select {
         $fields = array_keys(reset($this->databaseContents[$table]));
       }
       else {
-        throw new \Exception(String::format('All fields on empty table @table is not supported.', array('@table' => $table)));
+        throw new \Exception(SafeMarkup::format('All fields on empty table @table is not supported.', array('@table' => $table)));
       }
     }
     return parent::fields($table_alias, $fields);

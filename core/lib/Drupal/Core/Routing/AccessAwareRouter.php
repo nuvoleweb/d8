@@ -12,7 +12,7 @@ use Drupal\Core\Session\AccountInterface;
 use Symfony\Cmf\Component\Routing\ChainRouter;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
-use Symfony\Component\Routing\RequestContext;
+use Symfony\Component\Routing\RequestContext as SymfonyRequestContext;
 
 /**
  * A router class for Drupal with access check and upcasting.
@@ -68,7 +68,7 @@ class AccessAwareRouter implements AccessAwareRouterInterface {
   /**
    * {@inheritdoc}
    */
-  public function setContext(RequestContext $context) {
+  public function setContext(SymfonyRequestContext $context) {
     $this->chainRouter->setContext($context);
   }
 
@@ -101,7 +101,15 @@ class AccessAwareRouter implements AccessAwareRouterInterface {
    *   The request to access check.
    */
   protected function checkAccess(Request $request) {
-    if (!$this->accessManager->checkRequest($request, $this->account)) {
+    // The cacheability (if any) of this request's access check result must be
+    // applied to the response.
+    $access_result = $this->accessManager->checkRequest($request, $this->account, TRUE);
+    // Allow a master request to set the access result for a subrequest: if an
+    // access result attribute is already set, don't overwrite it.
+    if (!$request->attributes->has(AccessAwareRouterInterface::ACCESS_RESULT)) {
+      $request->attributes->set(AccessAwareRouterInterface::ACCESS_RESULT, $access_result);
+    }
+    if (!$access_result->isAllowed()) {
       throw new AccessDeniedHttpException();
     }
   }

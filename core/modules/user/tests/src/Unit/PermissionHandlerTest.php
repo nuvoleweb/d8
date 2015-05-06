@@ -55,6 +55,8 @@ class PermissionHandlerTest extends UnitTestCase {
    * {@inheritdoc}
    */
   protected function setUp() {
+    parent::setUp();
+
     $this->stringTranslation = $this->getStringTranslationStub();
     $this->controllerResolver = $this->getMock('Drupal\Core\Controller\ControllerResolverInterface');
   }
@@ -71,74 +73,16 @@ class PermissionHandlerTest extends UnitTestCase {
    *   The extension object.
    */
   protected function mockModuleExtension($module, $name) {
-    $extension = new Extension($module, "modules/$module");
+    $extension = new Extension($this->root, $module, "modules/$module");
     $extension->info['name'] = $name;
     return $extension;
   }
-
-  /**
-   * Tests permissions by hook_permission.
-   *
-   * @covers ::__construct
-   * @covers ::getPermissions
-   * @covers ::buildPermissions
-   * @covers ::buildPermissionsModules
-   * @covers ::sortPermissions
-   * @covers ::getModuleNames
-   */
-  public function testBuildPermissionsModules() {
-    $modules = array('module_a', 'module_b', 'module_c');
-    $extensions = array(
-      'module_a' => $this->mockModuleExtension('module_a', 'Module a'),
-      'module_b' => $this->mockModuleExtension('module_b', 'Moduleb'),
-      'module_c' => $this->mockModuleExtension('module_c', 'Module c'),
-    );
-    $permissions = array(
-      'module_a' => array('access_module_a' => 'single_description'),
-      'module_b' => array('access module b' => array('title' => 'Access B', 'description' => 'bla bla')),
-      'module_c' => array('access_module_c' => array('title' => 'Access C', 'description' => 'bla bla', 'restrict access' => TRUE)),
-    );
-    $this->moduleHandler = $this->getMock('Drupal\Core\Extension\ModuleHandlerInterface');
-    $this->moduleHandler->expects($this->once())
-      ->method('getModuleDirectories')
-      ->willReturn([]);
-
-    $this->moduleHandler->expects($this->at(1))
-      ->method('getImplementations')
-      ->with('permission')
-      ->willReturn($modules);
-
-    // Setup the module handler.
-    $i = 2;
-    foreach ($modules as $module_name) {
-      $this->moduleHandler->expects($this->at($i++))
-        ->method('invoke')
-        ->with($module_name)
-        ->willReturn($permissions[$module_name]);
-    }
-    $this->moduleHandler->expects($this->any())
-      ->method('getModuleList')
-      ->willReturn(array_flip($modules));
-
-    $this->permissionHandler = new TestPermissionHandler($this->moduleHandler, $this->stringTranslation, $this->controllerResolver);
-
-    // Setup system_rebuild_module_data().
-    $this->permissionHandler->setSystemRebuildModuleData($extensions);
-
-    $actual_permissions = $this->permissionHandler->getPermissions();
-    $this->assertPermissions($actual_permissions);
-    // Ensure that the human name of the module is taken into account for the
-    // sorting.
-    $this->assertSame(array('access_module_a', 'access_module_c', 'access module b'), array_keys($actual_permissions));
-  }
-
 
   /**
    * Tests permissions provided by YML files.
    *
    * @covers ::__construct
    * @covers ::getPermissions
-   * @covers ::buildPermissions
    * @covers ::buildPermissionsYaml
    * @covers ::moduleProvidesPermissions
    */
@@ -211,7 +155,6 @@ class PermissionHandlerTest extends UnitTestCase {
    *
    * @covers ::__construct
    * @covers ::getPermissions
-   * @covers ::buildPermissions
    * @covers ::buildPermissionsYaml
    * @covers ::sortPermissions
    */
@@ -261,7 +204,6 @@ access_module_a1: single_description"
    *
    * @covers ::__construct
    * @covers ::getPermissions
-   * @covers ::buildPermissions
    * @covers ::buildPermissionsYaml
    */
   public function testBuildPermissionsYamlCallback() {

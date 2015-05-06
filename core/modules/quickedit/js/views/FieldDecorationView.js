@@ -99,7 +99,8 @@
     /**
      * Adds a class to the edited element that indicates whether the field has
      * been changed by the user (i.e. locally) or the field has already been
-     * changed and stored before by the user (i.e. remotely, stored in TempStore).
+     * changed and stored before by the user (i.e. remotely, stored in
+     * PrivateTempStore).
      */
     renderChanged: function () {
       this.$el.toggleClass('quickedit-changed', this.model.get('isChanged') || this.model.get('inTempStore'));
@@ -123,7 +124,7 @@
      */
     onMouseLeave: function (event) {
       var that = this;
-      that.model.set('state', 'candidate', { reason: 'mouseleave' });
+      that.model.set('state', 'candidate', {reason: 'mouseleave'});
       event.stopPropagation();
     },
 
@@ -296,13 +297,13 @@
      * @param DOM $e
      */
     _getPositionProperties: function ($e) {
-      var p,
-        r = {},
-        props = [
-          'top', 'left', 'bottom', 'right',
-          'padding-top', 'padding-left', 'padding-right', 'padding-bottom',
-          'margin-bottom'
-        ];
+      var p;
+      var r = {};
+      var props = [
+        'top', 'left', 'bottom', 'right',
+        'padding-top', 'padding-left', 'padding-right', 'padding-bottom',
+        'margin-bottom'
+      ];
 
       var propCount = props.length;
       for (var i = 0; i < propCount; i++) {

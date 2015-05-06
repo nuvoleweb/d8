@@ -14,18 +14,41 @@ use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Core\StringTranslation\TranslationInterface;
 
 /**
- * Provides the available permissions based on hook_permission and yml files.
+ * Provides the available permissions based on yml files.
  *
- * To define permissions you can use a $module.permissions.yml file:
+ * To define permissions you can use a $module.permissions.yml file. This file
+ * defines machine names, human-readable names, restrict access (if required for
+ * security warning), and optionally descriptions for each permission type. The
+ * machine names are the canonical way to refer to permissions for access
+ * checking.
  *
+ * If your module needs to define dynamic permissions you can use the
+ * permission_callbacks key to declare a callable that will return an array of
+ * permissions, keyed by machine name. Each item in the array can contain the
+ * same keys as an entry in $module.permissions.yml.
+ *
+ * Here is an example from the core filter module (comments have been added):
  * @code
- * 'access all views':
- *   title: 'Bypass views access control'
- *   description: 'Bypass access control when accessing views.'
- *   'restrict access': TRUE
- * @encode
+ * # The key is the permission machine name, and is required.
+ * administer filters:
+ *   # (required) Human readable name of the permission used in the UI.
+ *   title: 'Administer text formats and filters'
+ *   # (optional) Additional description fo the permission used in the UI.
+ *   description: 'Define how text is handled by combining filters into text formats.'
+ *   # (optional) Boolean, when set to true a warning about site security will
+ *   # be displayed on the Permissions page. Defaults to false.
+ *   restrict access: false
  *
- * @see hook_permission()
+ * # An array of callables used to generate dynamic permissions.
+ * permission_callbacks:
+ *   # Each item in the array should return an associative array with one or
+ *   # more permissions following the same keys as the permission defined above.
+ *   - Drupal\filter\FilterPermissions::permissions
+ * @endcode
+ *
+ * @see filter.permissions.yml
+ * @see \Drupal\filter\FilterPermissions
+ * @see user_api
  */
 class PermissionHandler implements PermissionHandlerInterface {
 
@@ -88,8 +111,6 @@ class PermissionHandler implements PermissionHandlerInterface {
    */
   public function getPermissions() {
     $all_permissions = $this->buildPermissionsYaml();
-
-    $all_permissions += $this->buildPermissionsModules();
 
     return $this->sortPermissions($all_permissions);
   }
@@ -171,33 +192,6 @@ class PermissionHandler implements PermissionHandlerInterface {
   }
 
   /**
-   * Builds all permissions provided by .module files.
-   *
-   * @return array[]
-   *   Each return permission is an array with the following keys:
-   *   - title: The title of the permission.
-   *   - description: The description of the permission, defaults to NULL.
-   *   - provider: The provider of the permission.
-   */
-  protected function buildPermissionsModules() {
-    $all_permissions = array();
-    foreach ($this->moduleHandler->getImplementations('permission') as $provider) {
-      $permissions = $this->moduleHandler->invoke($provider, 'permission');
-      foreach ($permissions as &$permission) {
-        if (!is_array($permission)) {
-          $permission = array(
-            'title' => $permission,
-            'description' => NULL,
-          );
-        }
-        $permission['provider'] = $provider;
-      }
-      $all_permissions += $permissions;
-    }
-    return $all_permissions;
-  }
-
-  /**
    * Sorts the given permissions by provider name and title.
    *
    * @param array $all_permissions
@@ -233,9 +227,8 @@ class PermissionHandler implements PermissionHandlerInterface {
    */
   protected function getModuleNames() {
     $modules = array();
-    $module_info = $this->systemRebuildModuleData();
     foreach (array_keys($this->moduleHandler->getModuleList()) as $module) {
-      $modules[$module] = $module_info[$module]->info['name'];
+      $modules[$module] = $this->moduleHandler->getName($module);
     }
     asort($modules);
     return $modules;

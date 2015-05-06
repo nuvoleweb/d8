@@ -35,7 +35,7 @@ class EntityFormTest extends WebTestBase {
   function testFormCRUD() {
     // All entity variations have to have the same results.
     foreach (entity_test_entity_types() as $entity_type) {
-      $this->assertFormCRUD($entity_type);
+      $this->doTestFormCRUD($entity_type);
     }
   }
 
@@ -56,13 +56,12 @@ class EntityFormTest extends WebTestBase {
    * @param string $entity_type
    *   The entity type to run the tests with.
    */
-  protected function assertFormCRUD($entity_type) {
+  protected function doTestFormCRUD($entity_type) {
     $name1 = $this->randomMachineName(8);
     $name2 = $this->randomMachineName(10);
 
     $edit = array(
-      'name' => $name1,
-      'user_id' => mt_rand(0, 128),
+      'name[0][value]' => $name1,
       'field_test_text[0][value]' => $this->randomMachineName(16),
     );
 
@@ -70,7 +69,7 @@ class EntityFormTest extends WebTestBase {
     $entity = $this->loadEntityByName($entity_type, $name1);
     $this->assertTrue($entity, format_string('%entity_type: Entity found in the database.', array('%entity_type' => $entity_type)));
 
-    $edit['name'] = $name2;
+    $edit['name[0][value]'] = $name2;
     $this->drupalPostForm($entity_type . '/manage/' . $entity->id(), $edit, t('Save'));
     $entity = $this->loadEntityByName($entity_type, $name1);
     $this->assertFalse($entity, format_string('%entity_type: The entity has been modified.', array('%entity_type' => $entity_type)));
@@ -80,7 +79,7 @@ class EntityFormTest extends WebTestBase {
 
     $this->drupalGet($entity_type . '/manage/' . $entity->id());
     $this->clickLink(t('Delete'));
-    $this->drupalPostForm(NULL, array(), t('Confirm'));
+    $this->drupalPostForm(NULL, array(), t('Delete'));
     $entity = $this->loadEntityByName($entity_type, $name2);
     $this->assertFalse($entity, format_string('%entity_type: Entity not found in the database.', array('%entity_type' => $entity_type)));
   }

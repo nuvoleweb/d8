@@ -2,44 +2,41 @@
 
 /**
  * @file
- * Contains \Drupal\file\Plugin\field\formatter\FileFormatterBase.
+ * Contains \Drupal\file\Plugin\Field\FieldFormatter\FileFormatterBase.
  */
 
 namespace Drupal\file\Plugin\Field\FieldFormatter;
 
-use Drupal\Core\Field\FormatterBase;
+use Drupal\Core\Access\AccessResult;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Field\Plugin\Field\FieldFormatter\EntityReferenceFormatterBase;
+use Drupal\Core\Field\Plugin\Field\FieldType\EntityReferenceItem;
 
 /**
  * Base class for file formatters.
  */
-abstract class FileFormatterBase extends FormatterBase {
+abstract class FileFormatterBase extends EntityReferenceFormatterBase {
 
   /**
    * {@inheritdoc}
    */
-  public function prepareView(array $entities_items) {
-    // Remove files specified to not be displayed.
-    $fids = array();
-    foreach ($entities_items as $items) {
-      foreach ($items as $item) {
-        if ($item->isDisplayed() && !empty($item->target_id)) {
-          // Load the files from the files table.
-          $fids[] = $item->target_id;
-        }
-      }
+  protected function needsEntityLoad(EntityReferenceItem $item) {
+    return parent::needsEntityLoad($item) && $item->isDisplayed();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function checkAccess(EntityInterface $entity) {
+    // Only check access if the current file access control handler explicitly
+    // opts in by implementing FileAccessFormatterControlHandlerInterface.
+    $access_handler_class = $entity->getEntityType()->getHandlerClass('access');
+    if (is_subclass_of($access_handler_class, '\Drupal\file\FileAccessFormatterControlHandlerInterface')) {
+      return $entity->access('view', NULL, TRUE);
     }
-
-    if ($fids) {
-      $files = file_load_multiple($fids);
-
-      foreach ($entities_items as $items) {
-        foreach ($items as $item) {
-          // If the file does not exist, mark the entire item as empty.
-          if (!empty($item->target_id)) {
-            $item->entity = isset($files[$item->target_id]) ? $files[$item->target_id] : NULL;
-          }
-        }
-      }
+    else {
+      return AccessResult::allowed();
     }
   }
+
 }

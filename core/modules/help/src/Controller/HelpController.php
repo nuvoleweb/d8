@@ -9,9 +9,10 @@ namespace Drupal\help\Controller;
 
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\Core\Url;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 
 /**
  * Controller routines for help routes.
@@ -52,10 +53,8 @@ class HelpController extends ControllerBase {
    */
   public function helpMain() {
     $output = array(
-      '#attached' => array(
-        'css' => array(drupal_get_path('module', 'help') . '/css/help.module.css'),
-      ),
-      '#markup' => '<h2>' . $this->t('Help topics') . '</h2><p>' . $this->t('Help is available on the following items:') . '</p>' . $this->helpLinksAsList(),
+      '#markup' => '<h2>' . $this->t('Help topics') . '</h2><p>' . $this->t('Help is available on the following items:') . '</p>',
+      'links' => $this->helpLinksAsList(),
     );
     return $output;
   }
@@ -67,12 +66,10 @@ class HelpController extends ControllerBase {
    *   A string containing the formatted list.
    */
   protected function helpLinksAsList() {
-    $module_info = system_rebuild_module_data();
-
     $modules = array();
     foreach ($this->moduleHandler()->getImplementations('help') as $module) {
       if ($this->moduleHandler()->invoke($module, 'help', array("help.page.$module", $this->routeMatch))) {
-        $modules[$module] = $module_info[$module]->info['name'];
+        $modules[$module] = $this->moduleHandler->getName($module);
       }
     }
     asort($modules);
@@ -80,16 +77,27 @@ class HelpController extends ControllerBase {
     // Output pretty four-column list.
     $count = count($modules);
     $break = ceil($count / 4);
-    $output = '<div class="clearfix"><div class="help-items"><ul>';
+    $column = array(
+      '#type' => 'container',
+      'links' => array('#theme' => 'item_list'),
+      '#attributes' => array('class' => array('layout-column', 'quarter')),
+    );
+    $output = array(
+      '#prefix' => '<div class="clearfix">',
+      '#suffix' => '</div>',
+      0 => $column,
+    );
+
     $i = 0;
+    $current_column = 0;
     foreach ($modules as $module => $name) {
-      $output .= '<li>' . $this->l($name, 'help.page',  array('name' => $module)) . '</li>';
+      $output[$current_column]['links']['#items'][] = $this->l($name, new Url('help.page', array('name' => $module)));
       if (($i + 1) % $break == 0 && ($i + 1) != $count) {
-        $output .= '</ul></div><div class="help-items' . ($i + 1 == $break * 3 ? ' help-items-last' : '') . '"><ul>';
+        $current_column++;
+        $output[$current_column] = $column;
       }
       $i++;
     }
-    $output .= '</ul></div></div>';
 
     return $output;
   }
@@ -108,12 +116,12 @@ class HelpController extends ControllerBase {
   public function helpPage($name) {
     $build = array();
     if ($this->moduleHandler()->implementsHook($name, 'help')) {
-      $info = system_get_info('module');
-      $build['#title'] = String::checkPlain($info[$name]['name']);
+      $module_name =  $this->moduleHandler()->getName($name);
+      $build['#title'] = SafeMarkup::checkPlain($module_name);
 
       $temp = $this->moduleHandler()->invoke($name, 'help', array("help.page.$name", $this->routeMatch));
       if (empty($temp)) {
-        $build['top']['#markup'] = $this->t('No help is available for module %module.', array('%module' => $info[$name]['name']));
+        $build['top']['#markup'] = $this->t('No help is available for module %module.', array('%module' => $module_name));
       }
       else {
         $build['top']['#markup'] = $temp;
@@ -121,18 +129,18 @@ class HelpController extends ControllerBase {
 
       // Only print list of administration pages if the module in question has
       // any such pages associated to it.
-      $admin_tasks = system_get_module_admin_tasks($name, $info[$name]);
+      $admin_tasks = system_get_module_admin_tasks($name, system_get_info('module', $name));
       if (!empty($admin_tasks)) {
         $links = array();
         foreach ($admin_tasks as $task) {
-          $link = $task['url']->toArray();
+          $link['url'] = $task['url'];
           $link['title'] = $task['title'];
           $links[] = $link;
         }
         $build['links']['#links'] = array(
           '#heading' => array(
             'level' => 'h3',
-            'text' => $this->t('@module administration pages', array('@module' => $info[$name]['name'])),
+            'text' => $this->t('@module administration pages', array('@module' => $module_name)),
           ),
           '#links' => $links,
         );

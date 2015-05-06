@@ -7,7 +7,7 @@
 
 namespace Drupal\Core\Template;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 
 /**
  * A class that defines a type of Attribute that can be added to as an array.
@@ -28,6 +28,14 @@ use Drupal\Component\Utility\String;
  * @see \Drupal\Core\Template\Attribute
  */
 class AttributeArray extends AttributeValueBase implements \ArrayAccess, \IteratorAggregate {
+
+  /**
+   * Ensures empty array as a result of array_filter will not print '$name=""'.
+   *
+   * @see \Drupal\Core\Template\AttributeArray::__toString()
+   * @see \Drupal\Core\Template\AttributeValueBase::render()
+   */
+  const RENDER_EMPTY_ATTRIBUTE = FALSE;
 
   /**
    * Implements ArrayAccess::offsetGet().
@@ -67,8 +75,8 @@ class AttributeArray extends AttributeValueBase implements \ArrayAccess, \Iterat
    */
   public function __toString() {
     // Filter out any empty values before printing.
-    $this->value = array_filter($this->value);
-    return String::checkPlain(implode(' ', $this->value));
+    $this->value = array_unique(array_filter($this->value));
+    return SafeMarkup::checkPlain(implode(' ', $this->value));
   }
 
   /**
@@ -76,13 +84,6 @@ class AttributeArray extends AttributeValueBase implements \ArrayAccess, \Iterat
    */
   public function getIterator() {
     return new \ArrayIterator($this->value);
-  }
-
-  /**
-   * Returns the whole array.
-   */
-  public function value() {
-    return $this->value;
   }
 
   /**

@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\field\Annotation\FieldWidget.
+ * Contains \Drupal\Core\Field\Annotation\FieldWidget.
  */
 
 namespace Drupal\Core\Field\Annotation;
@@ -76,7 +76,7 @@ class FieldWidget extends Plugin {
 
   /**
    * An integer to determine the weight of this widget relative to other widgets
-   * in the Field UI when selecting a widget for a given field instance.
+   * in the Field UI when selecting a widget for a given field.
    *
    * @var int optional
    */

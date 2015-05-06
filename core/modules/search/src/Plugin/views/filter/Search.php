@@ -74,7 +74,7 @@ class Search extends FilterPluginBase {
   protected function operatorForm(&$form, FormStateInterface $form_state) {
     $form['operator'] = array(
       '#type' => 'radios',
-      '#title' => t('On empty input'),
+      '#title' => $this->t('On empty input'),
       '#default_value' => $this->operator,
       '#options' => array(
         'optional' => $this->t('Show All'),
@@ -108,7 +108,7 @@ class Search extends FilterPluginBase {
     if (!$form_state->isValueEmpty($key)) {
       $this->queryParseSearchExpression($form_state->getValue($key));
       if (count($this->searchQuery->words()) == 0) {
-        $form_state->setErrorByName($key, format_plural(\Drupal::config('search.settings')->get('index.minimum_word_size'), 'You must include at least one positive keyword with 1 character or more.', 'You must include at least one positive keyword with @count characters or more.'));
+        $form_state->setErrorByName($key, $this->formatPlural(\Drupal::config('search.settings')->get('index.minimum_word_size'), 'You must include at least one positive keyword with 1 character or more.', 'You must include at least one positive keyword with @count characters or more.'));
       }
     }
   }
@@ -169,32 +169,21 @@ class Search extends FilterPluginBase {
 
       $search_total = $this->query->addRelationship('search_total', $join, $search_index);
 
-      $this->search_score = $this->query->addField('', "SUM($search_index.score * $search_total.count)", 'score', array('aggregate' => TRUE));
+      $this->search_score = $this->query->addField('', "$search_index.score * $search_total.count", 'score', array('function' => 'sum'));
 
       $search_condition->condition("$search_index.type", $this->searchType);
-      if (!$this->searchQuery->simple()) {
-        $search_dataset = $this->query->addTable('search_dataset');
-        $conditions = $this->searchQuery->conditions();
-        $condition_conditions =& $conditions->conditions();
-        foreach ($condition_conditions  as $key => &$condition) {
-          // Make sure we just look at real conditions.
-          if (is_numeric($key)) {
-            // Replace the conditions with the table alias of views.
-            $this->searchQuery->conditionReplaceString('d.', "$search_dataset.", $condition);
-          }
+      $search_dataset = $this->query->addTable('node_search_dataset');
+      $conditions = $this->searchQuery->conditions();
+      $condition_conditions =& $conditions->conditions();
+      foreach ($condition_conditions  as $key => &$condition) {
+        // Make sure we just look at real conditions.
+        if (is_numeric($key)) {
+          // Replace the conditions with the table alias of views.
+          $this->searchQuery->conditionReplaceString('d.', "$search_dataset.", $condition);
         }
-        $search_conditions =& $search_condition->conditions();
-        $search_conditions = array_merge($search_conditions, $condition_conditions);
       }
-      else {
-        // Stores each condition, so and/or on the filter level will still work.
-        $or = db_or();
-        foreach ($words as $word) {
-          $or->condition("$search_index.word", $word);
-        }
-
-        $search_condition->condition($or);
-      }
+      $search_conditions =& $search_condition->conditions();
+      $search_conditions = array_merge($search_conditions, $condition_conditions);
 
       $this->query->addWhere($this->options['group'], $search_condition);
       $this->query->addGroupBy("$search_index.sid");

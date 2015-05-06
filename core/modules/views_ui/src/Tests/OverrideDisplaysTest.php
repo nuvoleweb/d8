@@ -49,7 +49,7 @@ class OverrideDisplaysTest extends UITestBase {
     $this->assertText($original_title);
 
     // Confirm that the view block is available in the block administration UI.
-    $this->drupalGet('admin/structure/block/list/' . \Drupal::config('system.theme')->get('default'));
+    $this->drupalGet('admin/structure/block/list/' . $this->config('system.theme')->get('default'));
     $this->assertText($view['label']);
 
     // Place the block.
@@ -108,7 +108,7 @@ class OverrideDisplaysTest extends UITestBase {
     $this->assertNoText($view['block[title]']);
 
     // Confirm that the block is available in the block administration UI.
-    $this->drupalGet('admin/structure/block/list/' . \Drupal::config('system.theme')->get('default'));
+    $this->drupalGet('admin/structure/block/list/' . $this->config('system.theme')->get('default'));
     $this->assertText($view['label']);
 
     // Put the block into the first sidebar region, and make sure it will not
@@ -172,7 +172,7 @@ class OverrideDisplaysTest extends UITestBase {
   function testRevertAllDisplays() {
     // Create a basic view with a page, block.
     // Because there is both a title on page and block we expect the title on
-    // the block be overriden.
+    // the block be overridden.
     $view['label'] = $this->randomMachineName(16);
     $view['id'] = strtolower($this->randomMachineName(16));
     $view['page[create]'] = 1;
@@ -182,8 +182,8 @@ class OverrideDisplaysTest extends UITestBase {
     $view['block[title]'] = $this->randomMachineName(16);
     $this->drupalPostForm('admin/structure/views/add', $view, t('Save and edit'));
 
-    // Revert the title of the block back to the default ones, but submit some
-    // new values to be sure that the new value is not stored.
+    // Revert the title of the block to the default ones, but submit some new
+    // values to be sure that the new value is not stored.
     $edit = array();
     $edit['title'] = $new_block_title = $this->randomMachineName();
     $edit['override[dropdown]'] = 'default_revert';

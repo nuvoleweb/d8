@@ -44,7 +44,7 @@ class Editor extends Plugin {
   /**
    * Whether the editor supports "allowed content only" filtering.
    *
-   * @var boolean
+   * @var bool
    */
   public $supports_content_filtering;
 
@@ -61,5 +61,12 @@ class Editor extends Plugin {
    * @var bool
    */
   public $is_xss_safe;
+
+  /**
+   * A list of element types this text editor supports.
+   *
+   * @var string[]
+   */
+  public $supported_element_types;
 
 }

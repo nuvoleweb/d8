@@ -19,7 +19,7 @@ use Drupal\views\Plugin\views\wizard\WizardPluginBase;
  *
  * @ViewsWizard(
  *   id = "node",
- *   base_table = "node",
+ *   base_table = "node_field_data",
  *   title = @Translation("Content")
  * )
  */
@@ -31,21 +31,6 @@ class Node extends WizardPluginBase {
   protected $createdColumn = 'node_field_data-created';
 
   /**
-   * Set default values for the path field options.
-   */
-  protected $pathField = array(
-    'id' => 'nid',
-    'table' => 'node',
-    'field' => 'nid',
-    'exclude' => TRUE,
-    'link_to_node' => FALSE,
-    'alter' => array(
-      'alter_text' => TRUE,
-      'text' => 'node/[nid]'
-    )
-  );
-
-  /**
    * Set default values for the filters.
    */
   protected $filters = array(
@@ -53,7 +38,9 @@ class Node extends WizardPluginBase {
       'value' => TRUE,
       'table' => 'node_field_data',
       'field' => 'status',
-      'provider' => 'node'
+      'plugin_id' => 'boolean',
+      'entity_type' => 'node',
+      'entity_field' => 'status',
     )
   );
 
@@ -65,7 +52,7 @@ class Node extends WizardPluginBase {
   public function getAvailableSorts() {
     // You can't execute functions in properties, so override the method
     return array(
-      'node_field_data-title:DESC' => t('Title')
+      'node_field_data-title:DESC' => $this->t('Title')
     );
   }
 
@@ -74,48 +61,12 @@ class Node extends WizardPluginBase {
    */
   protected function rowStyleOptions() {
     $options = array();
-    $options['teasers'] = t('teasers');
-    $options['full_posts'] = t('full posts');
-    $options['titles'] = t('titles');
-    $options['titles_linked'] = t('titles (linked)');
-    $options['fields'] = t('fields');
+    $options['teasers'] = $this->t('teasers');
+    $options['full_posts'] = $this->t('full posts');
+    $options['titles'] = $this->t('titles');
+    $options['titles_linked'] = $this->t('titles (linked)');
+    $options['fields'] = $this->t('fields');
     return $options;
-  }
-
-  /**
-   * Adds the style options to the wizard form.
-   *
-   * @param array $form
-   *   The full wizard form array.
-   * @param \Drupal\Core\Form\FormStateInterface $form_state
-   *   The current state of the wizard form.
-   * @param string $type
-   *   The display ID (e.g. 'page' or 'block').
-   */
-  protected function buildFormStyle(array &$form, FormStateInterface $form_state, $type) {
-    parent::buildFormStyle($form, $form_state, $type);
-    $style_form =& $form['displays'][$type]['options']['style'];
-    // Some style plugins don't support row plugins so stop here if that's the
-    // case.
-    if (!isset($style_form['row_plugin']['#default_value'])) {
-      return;
-    }
-    $row_plugin = $style_form['row_plugin']['#default_value'];
-    switch ($row_plugin) {
-      case 'full_posts':
-      case 'teasers':
-        $style_form['row_options']['links'] = array(
-          '#type' => 'select',
-          '#title' => t('Should links be displayed below each node'),
-          '#title_display' => 'invisible',
-          '#options' => array(
-            1 => t('with links (allow users to add comments, etc.)'),
-            0 => t('without links'),
-          ),
-          '#default_value' => 1,
-        );
-        break;
-    }
   }
 
   /**
@@ -126,7 +77,7 @@ class Node extends WizardPluginBase {
 
     // Add permission-based access control.
     $display_options['access']['type'] = 'perm';
-    $display_options['access']['provider'] = 'user';
+    $display_options['access']['options']['perm'] = 'access content';
 
     // Remove the default fields, since we are customizing them here.
     unset($display_options['fields']);
@@ -137,7 +88,8 @@ class Node extends WizardPluginBase {
     $display_options['fields']['title']['id'] = 'title';
     $display_options['fields']['title']['table'] = 'node_field_data';
     $display_options['fields']['title']['field'] = 'title';
-    $display_options['fields']['title']['provider'] = 'node';
+    $display_options['fields']['title']['entity_type'] = 'node';
+    $display_options['fields']['title']['entity_field'] = 'title';
     $display_options['fields']['title']['label'] = '';
     $display_options['fields']['title']['alter']['alter_text'] = 0;
     $display_options['fields']['title']['alter']['make_link'] = 0;
@@ -149,7 +101,8 @@ class Node extends WizardPluginBase {
     $display_options['fields']['title']['alter']['html'] = 0;
     $display_options['fields']['title']['hide_empty'] = 0;
     $display_options['fields']['title']['empty_zero'] = 0;
-    $display_options['fields']['title']['link_to_node'] = 1;
+    $display_options['fields']['title']['settings']['link_to_entity'] = 1;
+    $display_options['fields']['title']['plugin_id'] = 'field';
 
     return $display_options;
   }
@@ -160,14 +113,21 @@ class Node extends WizardPluginBase {
   protected function defaultDisplayFiltersUser(array $form, FormStateInterface $form_state) {
     $filters = parent::defaultDisplayFiltersUser($form, $form_state);
 
-    $tids = $form_state->getValue(array('show', 'tagged_with', 'tids'));
+    $tids = array();
+    if ($values = $form_state->getValue(array('show', 'tagged_with'))) {
+      foreach ($values as $value) {
+        $tids[] = $value['target_id'];
+      }
+    }
     if (!empty($tids)) {
+      $vid = reset($form['displays']['show']['tagged_with']['#selection_settings']['target_bundles']);
       $filters['tid'] = array(
         'id' => 'tid',
         'table' => 'taxonomy_index',
         'field' => 'tid',
         'value' => $tids,
-        'vocabulary' => $form_state->getValue(array('show', 'tagged_with', 'vocabulary')),
+        'vid' => $vid,
+        'plugin_id' => 'taxonomy_index_tid',
       );
       // If the user entered more than one valid term in the autocomplete
       // field, they probably intended both of them to be applied.
@@ -211,21 +171,20 @@ class Node extends WizardPluginBase {
     switch ($row_plugin) {
       case 'full_posts':
         $display_options['row']['type'] = 'entity:node';
-        $display_options['row']['options']['build_mode'] = 'full';
-        $display_options['row']['options']['links'] = !empty($row_options['links']);
+        $display_options['row']['options']['view_mode'] = 'full';
         break;
       case 'teasers':
         $display_options['row']['type'] = 'entity:node';
-        $display_options['row']['options']['build_mode'] = 'teaser';
-        $display_options['row']['options']['links'] = !empty($row_options['links']);
+        $display_options['row']['options']['view_mode'] = 'teaser';
         break;
       case 'titles_linked':
-        $display_options['row']['type'] = 'fields';
-        $display_options['field']['title']['link_to_node'] = 1;
-        break;
       case 'titles':
         $display_options['row']['type'] = 'fields';
-        $display_options['field']['title']['link_to_node'] = 0;
+        $display_options['fields']['title']['id'] = 'title';
+        $display_options['fields']['title']['table'] = 'node_field_data';
+        $display_options['fields']['title']['field'] = 'title';
+        $display_options['fields']['title']['settings']['link_to_entity'] = $row_plugin === 'titles_linked';
+        $display_options['fields']['title']['plugin_id'] = 'field';
         break;
     }
   }
@@ -269,18 +228,17 @@ class Node extends WizardPluginBase {
     foreach ($bundles as $bundle) {
       $display = entity_get_form_display($this->entityTypeId, $bundle, 'default');
       $taxonomy_fields = array_filter(\Drupal::entityManager()->getFieldDefinitions($this->entityTypeId, $bundle), function ($field_definition) {
-        return $field_definition->getType() == 'taxonomy_term_reference';
+        return $field_definition->getType() == 'entity_reference' && $field_definition->getSetting('target_type') == 'taxonomy_term';
       });
-      foreach ($taxonomy_fields as $field_name => $instance) {
+      foreach ($taxonomy_fields as $field_name => $field) {
         $widget = $display->getComponent($field_name);
         // We define "tag-like" taxonomy fields as ones that use the
-        // "Autocomplete term widget (tagging)" widget.
-        if ($widget['type'] == 'taxonomy_autocomplete') {
-          $tag_fields[] = $field_name;
+        // "Autocomplete (Tags style)" widget.
+        if ($widget['type'] == 'entity_reference_autocomplete_tags') {
+          $tag_fields[$field_name] = $field;
         }
       }
     }
-    $tag_fields = array_unique($tag_fields);
     if (!empty($tag_fields)) {
       // If there is more than one "tag-like" taxonomy field available to
       // the view, we can only make our filter apply to one of them (as
@@ -288,26 +246,22 @@ class Node extends WizardPluginBase {
       // that is created by the Standard install profile in core and also
       // commonly used by contrib modules; thus, it is most likely to be
       // associated with the "main" free-tagging vocabulary on the site.
-      if (in_array('field_tags', $tag_fields)) {
+      if (array_key_exists('field_tags', $tag_fields)) {
         $tag_field_name = 'field_tags';
       }
       else {
-        $tag_field_name = reset($tag_fields);
+        $tag_field_name = key($tag_fields);
       }
       // Add the autocomplete textfield to the wizard.
+      $target_bundles = $tag_fields[$tag_field_name]->getSetting('handler_settings')['target_bundles'];
       $form['displays']['show']['tagged_with'] = array(
-        '#type' => 'textfield',
-        '#title' => t('tagged with'),
-        '#autocomplete_route_name' => 'taxonomy.autocomplete',
-        '#autocomplete_route_parameters' => array(
-          'entity_type' => $this->entityTypeId,
-          'field_name' => $tag_field_name,
-        ),
+        '#type' => 'entity_autocomplete',
+        '#title' => $this->t('tagged with'),
+        '#target_type' => 'taxonomy_term',
+        '#selection_settings' => ['target_bundles' => $target_bundles],
+        '#tags' => TRUE,
         '#size' => 30,
         '#maxlength' => 1024,
-        '#entity_type' => $this->entityTypeId,
-        '#field_name' => $tag_field_name,
-        '#element_validate' => array('views_ui_taxonomy_autocomplete_validate'),
       );
     }
   }

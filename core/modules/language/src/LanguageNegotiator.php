@@ -9,9 +9,9 @@ namespace Drupal\language;
 
 use Drupal\Component\Plugin\PluginManagerInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
-use Drupal\Core\Language\LanguageManagerInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\Site\Settings;
+use Drupal\language\Plugin\LanguageNegotiation\LanguageNegotiationUI;
 use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
@@ -71,7 +71,7 @@ class LanguageNegotiator implements LanguageNegotiatorInterface {
   /**
    * An array of language objects keyed by method id.
    *
-   * @var array
+   * @var \Drupal\Core\Language\LanguageInterface[]
    */
   protected $negotiatedLanguages = array();
 
@@ -188,20 +188,7 @@ class LanguageNegotiator implements LanguageNegotiatorInterface {
     $method = $this->negotiatorManager->getDefinition($method_id);
 
     if (!isset($method['types']) || in_array($type, $method['types'])) {
-
-      // Check for a cache mode force from settings.php.
-      if ($this->settings->get('page_cache_without_database')) {
-        $cache_enabled = TRUE;
-      }
-      else {
-        $cache_enabled = $this->configFactory->get('system.performance')->get('cache.page.use_internal');
-      }
-
-      // If the language negotiation method has no cache preference or this is
-      // satisfied we can execute the callback.
-      if ($cache = !isset($method['cache']) || $this->currentUser->isAuthenticated() || $method['cache'] == $cache_enabled) {
-        $langcode = $this->getNegotiationMethodInstance($method_id)->getLangcode($this->requestStack->getCurrentRequest());
-      }
+      $langcode = $this->getNegotiationMethodInstance($method_id)->getLangcode($this->requestStack->getCurrentRequest());
     }
 
     $languages = $this->languageManager->getLanguages();
@@ -264,6 +251,8 @@ class LanguageNegotiator implements LanguageNegotiatorInterface {
    * {@inheritdoc}
    */
   function saveConfiguration($type, $enabled_methods) {
+    // As configurable language types might have changed, we reset the cache.
+    $this->languageManager->reset();
     $definitions = $this->getNegotiationMethods();
     $default_types = $this->languageManager->getLanguageTypes();
 
@@ -284,7 +273,7 @@ class LanguageNegotiator implements LanguageNegotiatorInterface {
         unset($enabled_methods[$method_id]);
       }
     }
-    $this->configFactory->get('language.types')->set('negotiation.' . $type . '.enabled', $enabled_methods)->save();
+    $this->configFactory->getEditable('language.types')->set('negotiation.' . $type . '.enabled', $enabled_methods)->save();
   }
 
   /**
@@ -320,30 +309,35 @@ class LanguageNegotiator implements LanguageNegotiatorInterface {
     foreach ($language_types_info as $type => $info) {
       $configurable = in_array($type, $types);
 
+      // The default language negotiation settings, if available, are stored in
+      // $info['fixed'].
+      $has_default_settings = !empty($info['fixed']);
       // Check whether the language type is unlocked. Only the status of
       // unlocked language types can be toggled between configurable and
-      // non-configurable. The default language negotiation settings, if
-      // available, are stored in $info['fixed'].
+      // non-configurable.
       if (empty($info['locked'])) {
-        // If we have a non-locked non-configurable language type without
-        // default language negotiation settings, we use the values negotiated
-        // for the interface language which should always be available.
-        if (!$configurable && !empty($info['fixed'])) {
+        if (!$configurable && !$has_default_settings) {
+          // If we have an unlocked non-configurable language type without
+          // default language negotiation settings, we use the values
+          // negotiated for the interface language which, should always be
+          // available.
           $method_weights = array(LanguageNegotiationUI::METHOD_ID);
           $method_weights = array_flip($method_weights);
           $this->saveConfiguration($type, $method_weights);
         }
       }
       else {
-        // Locked language types with default settings are always considered
-        // non-configurable. In turn if default settings are missing, the
-        // language type is always considered configurable.
-        $configurable = empty($info['fixed']);
+        // The language type is locked. Locked language types with default
+        // settings are always considered non-configurable. In turn if default
+        // settings are missing, the language type is always considered
+        // configurable.
 
-        // If the language is non-configurable we need to store its language
-        // negotiation settings.
-        if (!$configurable) {
+        // If the language type is locked we can just store its default language
+        // negotiation settings if it has some, since it is not configurable.
+        if ($has_default_settings) {
           $method_weights = array();
+          // Default settings are in $info['fixed'].
+
           foreach ($info['fixed'] as $weight => $method_id) {
             if (isset($method_definitions[$method_id])) {
               $method_weights[$method_id] = $weight;
@@ -351,8 +345,13 @@ class LanguageNegotiator implements LanguageNegotiatorInterface {
           }
           $this->saveConfiguration($type, $method_weights);
         }
+        else {
+          // It was missing default settings, so force it to be configurable.
+          $configurable = TRUE;
+        }
       }
 
+      // Accumulate information for each language type so it can be saved later.
       $language_types[$type] = $configurable;
     }
 

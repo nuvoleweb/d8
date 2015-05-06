@@ -17,13 +17,6 @@ use Drupal\Tests\UnitTestCase;
 class BookManagerTest extends UnitTestCase {
 
   /**
-   * The mocked database connection.
-   *
-   * @var \Drupal\Core\Database\Connection|\PHPUnit_Framework_MockObject_MockObject
-   */
-  protected $connection;
-
-  /**
    * The mocked entity manager.
    *
    * @var \Drupal\Core\Entity\EntityManager|\PHPUnit_Framework_MockObject_MockObject
@@ -45,6 +38,13 @@ class BookManagerTest extends UnitTestCase {
   protected $translation;
 
   /**
+   * The mocked renderer.
+   *
+   * @var \Drupal\Core\Render\RendererInterface|\PHPUnit_Framework_MockObject_MockObject
+   */
+  protected $renderer;
+
+  /**
    * The tested book manager.
    *
    * @var \Drupal\book\BookManager
@@ -52,16 +52,22 @@ class BookManagerTest extends UnitTestCase {
   protected $bookManager;
 
   /**
+   * Book outline storage.
+   *
+   * @var \Drupal\book\BookOutlineStorageInterface
+   */
+  protected $bookOutlineStorage;
+
+  /**
    * {@inheritdoc}
    */
   protected function setUp() {
-    $this->connection = $this->getMockBuilder('Drupal\Core\Database\Connection')
-      ->disableOriginalConstructor()
-      ->getMock();
     $this->entityManager = $this->getMock('Drupal\Core\Entity\EntityManagerInterface');
     $this->translation = $this->getStringTranslationStub();
     $this->configFactory = $this->getConfigFactoryStub(array());
-    $this->bookManager = new BookManager($this->connection, $this->entityManager, $this->translation, $this->configFactory);
+    $this->bookOutlineStorage = $this->getMock('Drupal\book\BookOutlineStorageInterface');
+    $this->renderer = $this->getMock('\Drupal\Core\Render\RendererInterface');
+    $this->bookManager = new BookManager($this->entityManager, $this->translation, $this->configFactory, $this->bookOutlineStorage, $this->renderer);
   }
 
   /**

@@ -7,7 +7,7 @@
 
 namespace Drupal\taxonomy\Tests;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Component\Utility\Xss;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 
@@ -19,40 +19,42 @@ use Drupal\Core\Field\FieldStorageDefinitionInterface;
  */
 class TokenReplaceTest extends TaxonomyTestBase {
 
+  /**
+   * The vocabulary used for creating terms.
+   *
+   * @var \Drupal\taxonomy\VocabularyInterface
+   */
+  protected $vocabulary;
+
+  /**
+   * Name of the taxonomy term reference field.
+   *
+   * @var string
+   */
+  protected $fieldName;
+
   protected function setUp() {
     parent::setUp();
-    $this->admin_user = $this->drupalCreateUser(array('administer taxonomy', 'bypass node access'));
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->drupalCreateUser(['administer taxonomy', 'bypass node access']));
     $this->vocabulary = $this->createVocabulary();
-    $this->field_name = 'taxonomy_' . $this->vocabulary->id();
-    entity_create('field_storage_config', array(
-      'name' => $this->field_name,
-      'entity_type' => 'node',
-      'type' => 'taxonomy_term_reference',
-      'cardinality' => FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED,
-      'settings' => array(
-        'allowed_values' => array(
-          array(
-            'vocabulary' => $this->vocabulary->id(),
-            'parent' => 0,
-          ),
-        ),
-      ),
-    ))->save();
+    $this->fieldName = 'taxonomy_' . $this->vocabulary->id();
 
-    entity_create('field_instance_config', array(
-      'field_name' => $this->field_name,
-      'bundle' => 'article',
-      'entity_type' => 'node',
-    ))->save();
+    $handler_settings = array(
+      'target_bundles' => array(
+        $this->vocabulary->id() => $this->vocabulary->id(),
+      ),
+      'auto_create' => TRUE,
+    );
+    $this->createEntityReferenceField('node', 'article', $this->fieldName, NULL, 'taxonomy_term', 'default', $handler_settings, FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED);
+
     entity_get_form_display('node', 'article', 'default')
-      ->setComponent($this->field_name, array(
+      ->setComponent($this->fieldName, array(
         'type' => 'options_select',
       ))
       ->save();
     entity_get_display('node', 'article', 'default')
-      ->setComponent($this->field_name, array(
-        'type' => 'taxonomy_term_reference_link',
+      ->setComponent($this->fieldName, array(
+        'type' => 'entity_reference_label',
       ))
       ->save();
   }
@@ -77,41 +79,41 @@ class TokenReplaceTest extends TaxonomyTestBase {
     // Create node with term2.
     $edit = array();
     $node = $this->drupalCreateNode(array('type' => 'article'));
-    $edit[$this->field_name . '[]'] = $term2->id();
+    $edit[$this->fieldName . '[]'] = $term2->id();
     $this->drupalPostForm('node/' . $node->id() . '/edit', $edit, t('Save'));
 
     // Generate and test sanitized tokens for term1.
     $tests = array();
     $tests['[term:tid]'] = $term1->id();
-    $tests['[term:name]'] = String::checkPlain($term1->getName());
+    $tests['[term:name]'] = SafeMarkup::checkPlain($term1->getName());
     $tests['[term:description]'] = $term1->description->processed;
-    $tests['[term:url]'] = url('taxonomy/term/' . $term1->id(), array('absolute' => TRUE));
+    $tests['[term:url]'] = $term1->url('canonical', array('absolute' => TRUE));
     $tests['[term:node-count]'] = 0;
     $tests['[term:parent:name]'] = '[term:parent:name]';
-    $tests['[term:vocabulary:name]'] = String::checkPlain($this->vocabulary->name);
+    $tests['[term:vocabulary:name]'] = SafeMarkup::checkPlain($this->vocabulary->label());
 
     foreach ($tests as $input => $expected) {
-      $output = $token_service->replace($input, array('term' => $term1), array('langcode' => $language_interface->id));
+      $output = $token_service->replace($input, array('term' => $term1), array('langcode' => $language_interface->getId()));
       $this->assertEqual($output, $expected, format_string('Sanitized taxonomy term token %token replaced.', array('%token' => $input)));
     }
 
     // Generate and test sanitized tokens for term2.
     $tests = array();
     $tests['[term:tid]'] = $term2->id();
-    $tests['[term:name]'] = String::checkPlain($term2->getName());
+    $tests['[term:name]'] = SafeMarkup::checkPlain($term2->getName());
     $tests['[term:description]'] = $term2->description->processed;
-    $tests['[term:url]'] = url('taxonomy/term/' . $term2->id(), array('absolute' => TRUE));
+    $tests['[term:url]'] = $term2->url('canonical', array('absolute' => TRUE));
     $tests['[term:node-count]'] = 1;
-    $tests['[term:parent:name]'] = String::checkPlain($term1->getName());
-    $tests['[term:parent:url]'] = url('taxonomy/term/' . $term1->id(), array('absolute' => TRUE));
+    $tests['[term:parent:name]'] = SafeMarkup::checkPlain($term1->getName());
+    $tests['[term:parent:url]'] = $term1->url('canonical', array('absolute' => TRUE));
     $tests['[term:parent:parent:name]'] = '[term:parent:parent:name]';
-    $tests['[term:vocabulary:name]'] = String::checkPlain($this->vocabulary->name);
+    $tests['[term:vocabulary:name]'] = SafeMarkup::checkPlain($this->vocabulary->label());
 
     // Test to make sure that we generated something for each token.
     $this->assertFalse(in_array(0, array_map('strlen', $tests)), 'No empty tokens generated.');
 
     foreach ($tests as $input => $expected) {
-      $output = $token_service->replace($input, array('term' => $term2), array('langcode' => $language_interface->id));
+      $output = $token_service->replace($input, array('term' => $term2), array('langcode' => $language_interface->getId()));
       $this->assertEqual($output, $expected, format_string('Sanitized taxonomy term token %token replaced.', array('%token' => $input)));
     }
 
@@ -119,18 +121,18 @@ class TokenReplaceTest extends TaxonomyTestBase {
     $tests['[term:name]'] = $term2->getName();
     $tests['[term:description]'] = $term2->getDescription();
     $tests['[term:parent:name]'] = $term1->getName();
-    $tests['[term:vocabulary:name]'] = $this->vocabulary->name;
+    $tests['[term:vocabulary:name]'] = $this->vocabulary->label();
 
     foreach ($tests as $input => $expected) {
-      $output = $token_service->replace($input, array('term' => $term2), array('langcode' => $language_interface->id, 'sanitize' => FALSE));
+      $output = $token_service->replace($input, array('term' => $term2), array('langcode' => $language_interface->getId(), 'sanitize' => FALSE));
       $this->assertEqual($output, $expected, format_string('Unsanitized taxonomy term token %token replaced.', array('%token' => $input)));
     }
 
     // Generate and test sanitized tokens.
     $tests = array();
     $tests['[vocabulary:vid]'] = $this->vocabulary->id();
-    $tests['[vocabulary:name]'] = String::checkPlain($this->vocabulary->name);
-    $tests['[vocabulary:description]'] = Xss::filter($this->vocabulary->description);
+    $tests['[vocabulary:name]'] = SafeMarkup::checkPlain($this->vocabulary->label());
+    $tests['[vocabulary:description]'] = Xss::filter($this->vocabulary->getDescription());
     $tests['[vocabulary:node-count]'] = 1;
     $tests['[vocabulary:term-count]'] = 2;
 
@@ -138,16 +140,16 @@ class TokenReplaceTest extends TaxonomyTestBase {
     $this->assertFalse(in_array(0, array_map('strlen', $tests)), 'No empty tokens generated.');
 
     foreach ($tests as $input => $expected) {
-      $output = $token_service->replace($input, array('vocabulary' => $this->vocabulary), array('langcode' => $language_interface->id));
+      $output = $token_service->replace($input, array('vocabulary' => $this->vocabulary), array('langcode' => $language_interface->getId()));
       $this->assertEqual($output, $expected, format_string('Sanitized taxonomy vocabulary token %token replaced.', array('%token' => $input)));
     }
 
     // Generate and test unsanitized tokens.
-    $tests['[vocabulary:name]'] = $this->vocabulary->name;
-    $tests['[vocabulary:description]'] = $this->vocabulary->description;
+    $tests['[vocabulary:name]'] = $this->vocabulary->label();
+    $tests['[vocabulary:description]'] = $this->vocabulary->getDescription();
 
     foreach ($tests as $input => $expected) {
-      $output = $token_service->replace($input, array('vocabulary' => $this->vocabulary), array('langcode' => $language_interface->id, 'sanitize' => FALSE));
+      $output = $token_service->replace($input, array('vocabulary' => $this->vocabulary), array('langcode' => $language_interface->getId(), 'sanitize' => FALSE));
       $this->assertEqual($output, $expected, format_string('Unsanitized taxonomy vocabulary token %token replaced.', array('%token' => $input)));
     }
   }

@@ -7,9 +7,9 @@
 
 namespace Drupal\system\Tests\Menu;
 
-use Drupal\Component\Utility\String;
-use Drupal\Component\Utility\Unicode;
+use Drupal\Core\Url;
 use Drupal\node\Entity\NodeType;
+use Drupal\user\RoleInterface;
 
 /**
  * Tests breadcrumbs functionality.
@@ -26,6 +26,20 @@ class BreadcrumbTest extends MenuTestBase {
   public static $modules = array('menu_test', 'block');
 
   /**
+   * An administrative user.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $adminUser;
+
+  /**
+   * A regular user.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $webUser;
+
+  /**
    * Test paths in the Standard profile.
    */
   protected $profile = 'standard';
@@ -34,16 +48,15 @@ class BreadcrumbTest extends MenuTestBase {
     parent::setUp();
 
     $perms = array_keys(\Drupal::service('user.permissions')->getPermissions());
-    $this->admin_user = $this->drupalCreateUser($perms);
-    $this->drupalLogin($this->admin_user);
+    $this->adminUser = $this->drupalCreateUser($perms);
+    $this->drupalLogin($this->adminUser);
 
     // This test puts menu links in the Tools menu and then tests for their
     // presence on the page, so we need to ensure that the Tools block will be
     // displayed in the admin theme.
     $this->drupalPlaceBlock('system_menu_block:tools', array(
-      'machine' => 'system_menu_tools',
       'region' => 'content',
-      'theme' => \Drupal::config('system.theme')->get('admin'),
+      'theme' => $this->config('system.theme')->get('admin'),
     ));
   }
 
@@ -115,7 +128,7 @@ class BreadcrumbTest extends MenuTestBase {
     // Verify Filter text format administration breadcrumbs.
     $filter_formats = filter_formats();
     $format = reset($filter_formats);
-    $format_id = $format->format;
+    $format_id = $format->id();
     $trail = $config + array(
       'admin/config/content' => t('Content authoring'),
     );
@@ -189,7 +202,7 @@ class BreadcrumbTest extends MenuTestBase {
     $menu = 'tools';
     $edit = array(
       'title[0][value]' => 'Root',
-      'url' => 'node',
+      'link[0][uri]' => '/node',
     );
     $this->drupalPostForm("admin/structure/menu/manage/$menu/add", $edit, t('Save'));
     $menu_links = entity_load_multiple_by_properties('menu_link_content', array('title' => 'Root'));
@@ -217,7 +230,7 @@ class BreadcrumbTest extends MenuTestBase {
       'Breadcrumbs' => array(),
     );
     $edit = array(
-      'field_tags' => implode(',', array_keys($tags)),
+      'field_tags[target_id]' => implode(',', array_keys($tags)),
     );
     $this->drupalPostForm('node/' . $parent->id() . '/edit', $edit, t('Save and keep published'));
 
@@ -242,15 +255,14 @@ class BreadcrumbTest extends MenuTestBase {
       $term = $data['term'];
       $edit = array(
         'title[0][value]' => "$name link",
-        'url' => "taxonomy/term/{$term->id()}",
+        'link[0][uri]' => "/taxonomy/term/{$term->id()}",
         'menu_parent' => "$menu:{$parent_mlid}",
         'enabled[value]' => 1,
       );
       $this->drupalPostForm("admin/structure/menu/manage/$menu/add", $edit, t('Save'));
       $menu_links = entity_load_multiple_by_properties('menu_link_content', array(
         'title' => $edit['title[0][value]'],
-        'route_name' => 'entity.taxonomy_term.canonical',
-        'route_parameters' => serialize(array('taxonomy_term' => $term->id())),
+        'link.uri' => 'internal:/taxonomy/term/' . $term->id(),
       ));
       $tags[$name]['link'] = reset($menu_links);
       $parent_mlid = $tags[$name]['link']->getPluginId();
@@ -272,15 +284,15 @@ class BreadcrumbTest extends MenuTestBase {
         $link_path => $link->getTitle(),
       );
       $this->assertBreadcrumb($link_path, $trail, $term->getName(), $tree);
-      $this->assertRaw(String::checkPlain($parent->getTitle()), 'Tagged node found.');
+      $this->assertEscaped($parent->getTitle(), 'Tagged node found.');
 
       // Additionally make sure that this link appears only once; i.e., the
       // untranslated menu links automatically generated from menu router items
       // ('taxonomy/term/%') should never be translated and appear in any menu
       // other than the breadcrumb trail.
-      $elements = $this->xpath('//div[@id=:menu]/descendant::a[@href=:href]', array(
+      $elements = $this->xpath('//nav[@id=:menu]/descendant::a[@href=:href]', array(
         ':menu' => 'block-bartik-tools',
-        ':href' => url($link_path),
+        ':href' => Url::fromUri('base:' . $link_path)->toString(),
       ));
       $this->assertTrue(count($elements) == 1, "Link to {$link_path} appears only once.");
 
@@ -294,7 +306,7 @@ class BreadcrumbTest extends MenuTestBase {
     // Verify breadcrumbs on user and user/%.
     // We need to log back in and out below, and cannot simply grant the
     // 'administer users' permission, since user_page() makes your head explode.
-    user_role_grant_permissions(DRUPAL_ANONYMOUS_RID, array(
+    user_role_grant_permissions(RoleInterface::ANONYMOUS_ID, array(
       'access user profiles',
     ));
 
@@ -304,47 +316,47 @@ class BreadcrumbTest extends MenuTestBase {
     // Verify breadcrumb on user pages (without menu link) for anonymous user.
     $trail = $home;
     $this->assertBreadcrumb('user', $trail, t('Log in'));
-    $this->assertBreadcrumb('user/' . $this->admin_user->id(), $trail, $this->admin_user->getUsername());
+    $this->assertBreadcrumb('user/' . $this->adminUser->id(), $trail, $this->adminUser->getUsername());
 
     // Verify breadcrumb on user pages (without menu link) for registered users.
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
     $trail = $home;
-    $this->assertBreadcrumb('user', $trail, $this->admin_user->getUsername());
-    $this->assertBreadcrumb('user/' . $this->admin_user->id(), $trail, $this->admin_user->getUsername());
+    $this->assertBreadcrumb('user', $trail, $this->adminUser->getUsername());
+    $this->assertBreadcrumb('user/' . $this->adminUser->id(), $trail, $this->adminUser->getUsername());
     $trail += array(
-      'user/' . $this->admin_user->id() => $this->admin_user->getUsername(),
+      'user/' . $this->adminUser->id() => $this->adminUser->getUsername(),
     );
-    $this->assertBreadcrumb('user/' . $this->admin_user->id() . '/edit', $trail, $this->admin_user->getUsername());
+    $this->assertBreadcrumb('user/' . $this->adminUser->id() . '/edit', $trail, $this->adminUser->getUsername());
 
     // Create a second user to verify breadcrumb on user pages again.
-    $this->web_user = $this->drupalCreateUser(array(
+    $this->webUser = $this->drupalCreateUser(array(
       'administer users',
       'access user profiles',
     ));
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
 
     // Verify correct breadcrumb and page title on another user's account pages.
     $trail = $home;
-    $this->assertBreadcrumb('user/' . $this->admin_user->id(), $trail, $this->admin_user->getUsername());
+    $this->assertBreadcrumb('user/' . $this->adminUser->id(), $trail, $this->adminUser->getUsername());
     $trail += array(
-      'user/' . $this->admin_user->id() => $this->admin_user->getUsername(),
+      'user/' . $this->adminUser->id() => $this->adminUser->getUsername(),
     );
-    $this->assertBreadcrumb('user/' . $this->admin_user->id() . '/edit', $trail, $this->admin_user->getUsername());
+    $this->assertBreadcrumb('user/' . $this->adminUser->id() . '/edit', $trail, $this->adminUser->getUsername());
 
     // Verify correct breadcrumb and page title when viewing own user account.
     $trail = $home;
-    $this->assertBreadcrumb('user/' . $this->web_user->id(), $trail, $this->web_user->getUsername());
+    $this->assertBreadcrumb('user/' . $this->webUser->id(), $trail, $this->webUser->getUsername());
     $trail += array(
-      'user/' . $this->web_user->id() => $this->web_user->getUsername(),
+      'user/' . $this->webUser->id() => $this->webUser->getUsername(),
     );
-    $this->assertBreadcrumb('user/' . $this->web_user->id() . '/edit', $trail, $this->web_user->getUsername());
+    $this->assertBreadcrumb('user/' . $this->webUser->id() . '/edit', $trail, $this->webUser->getUsername());
 
     // Create an only slightly privileged user being able to access site reports
     // but not administration pages.
-    $this->web_user = $this->drupalCreateUser(array(
+    $this->webUser = $this->drupalCreateUser(array(
       'access site reports',
     ));
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
 
     // Verify that we can access recent log entries, there is a corresponding
     // page title, and that the breadcrumb is just the Home link (because the
@@ -362,6 +374,11 @@ class BreadcrumbTest extends MenuTestBase {
     $trail += array('admin/reports' => t('Reports'));
     $this->assertBreadcrumb('admin/reports/dblog', $trail, t('Recent log messages'));
     $this->assertNoResponse(403);
+
+    // Ensure that the breadcrumb is safe against XSS.
+    $this->drupalGet('menu-test/breadcrumb1/breadcrumb2/breadcrumb3');
+    $this->assertRaw('<script>alert(12);</script>');
+    $this->assertEscaped('<script>alert(123);</script>');
   }
 
 }

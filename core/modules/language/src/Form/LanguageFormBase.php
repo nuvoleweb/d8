@@ -7,7 +7,7 @@
 
 namespace Drupal\language\Form;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Entity\EntityForm;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Language\LanguageInterface;
@@ -49,9 +49,9 @@ abstract class LanguageFormBase extends EntityForm {
    * Common elements of the language addition and editing form.
    */
   public function commonForm(array &$form) {
-    /** @var $language \Drupal\language\Entity\ConfigurableLanguage */
+    /* @var $language \Drupal\language\ConfigurableLanguageInterface */
     $language = $this->entity;
-    if ($language->id()) {
+    if ($language->getId()) {
       $form['langcode_view'] = array(
         '#type' => 'item',
         '#title' => $this->t('Language code'),
@@ -75,7 +75,7 @@ abstract class LanguageFormBase extends EntityForm {
     }
     $form['label'] = array(
       '#type' => 'textfield',
-      '#title' => $this->t('Language name in English'),
+      '#title' => $this->t('Language name'),
       '#maxlength' => 64,
       '#default_value' => $language->label(),
       '#required' => TRUE,
@@ -100,10 +100,13 @@ abstract class LanguageFormBase extends EntityForm {
    */
   public function validateCommon(array $form, FormStateInterface $form_state) {
     // Ensure sane field values for langcode and name.
-    if (!isset($form['langcode_view']) && preg_match('@[^a-zA-Z_-]@', $form_state->getValue('langcode'))) {
-      $form_state->setErrorByName('langcode', $this->t('%field may only contain characters a-z, underscores, or hyphens.', array('%field' => $form['langcode']['#title'])));
+    if (!isset($form['langcode_view']) && !preg_match('@^[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*$@', $form_state->getValue('langcode'))) {
+      $form_state->setErrorByName('langcode', $this->t('%field must be a valid language tag as <a href="@url">defined by the W3C</a>.', array(
+        '%field' => $form['langcode']['#title'],
+        '@url' => 'http://www.w3.org/International/articles/language-tags/',
+      )));
     }
-    if ($form_state->getValue('label') != String::checkPlain($form_state->getValue('label'))) {
+    if ($form_state->getValue('label') != SafeMarkup::checkPlain($form_state->getValue('label'))) {
       $form_state->setErrorByName('label', $this->t('%field cannot contain any markup.', array('%field' => $form['label']['#title'])));
     }
   }

@@ -7,10 +7,14 @@
 
 namespace Drupal\simpletest;
 
-use Composer\Autoload\ClassLoader;
+use Doctrine\Common\Annotations\SimpleAnnotationReader;
+use Doctrine\Common\Reflection\StaticReflectionParser;
+use Drupal\Component\Annotation\Reflection\MockFileFinder;
+use Drupal\Component\Utility\Unicode;
 use Drupal\Core\Cache\CacheBackendInterface;
-use Drupal\Core\Extension\Extension;
 use Drupal\Core\Extension\ExtensionDiscovery;
+use Drupal\simpletest\Exception\MissingGroupException;
+use Drupal\simpletest\Exception\MissingSummaryLineException;
 use PHPUnit_Util_Test;
 
 /**
@@ -49,12 +53,14 @@ class TestDiscovery {
   /**
    * Constructs a new test discovery.
    *
-   * @param \Composer\Autoload\ClassLoader $class_loader
-   *   The class loader.
+   * @param $class_loader
+   *   The class loader. Normally Composer's ClassLoader, as included by the
+   *   front controller, but may also be decorated; e.g.,
+   *   \Symfony\Component\ClassLoader\ApcClassLoader.
    * @param \Drupal\Core\Cache\CacheBackendInterface $cache_backend
    *   (optional) Backend for caching discovery results.
    */
-  public function __construct(ClassLoader $class_loader, CacheBackendInterface $cache_backend = NULL) {
+  public function __construct($class_loader, CacheBackendInterface $cache_backend = NULL) {
     $this->classLoader = $class_loader;
     $this->cacheBackend = $cache_backend;
   }
@@ -74,8 +80,9 @@ class TestDiscovery {
 
     $existing = $this->classLoader->getPrefixesPsr4();
 
-    // Add PHPUnit test namespace of Drupal core.
+    // Add PHPUnit test namespaces of Drupal core.
     $this->testNamespaces['Drupal\\Tests\\'] = [DRUPAL_ROOT . '/core/tests/Drupal/Tests'];
+    $this->testNamespaces['Drupal\\FunctionalTests\\'] = [DRUPAL_ROOT . '/core/tests/Drupal/FunctionalTests'];
 
     $this->availableExtensions = array();
     foreach ($this->getExtensions() as $name => $extension) {
@@ -90,8 +97,9 @@ class TestDiscovery {
       // Add Simpletest test namespace.
       $this->testNamespaces["Drupal\\$name\\Tests\\"][] = "$base_path/src/Tests";
 
-      // Add PHPUnit test namespace.
-      $this->testNamespaces["Drupal\\Tests\\$name\\"][] = "$base_path/tests/src";
+      // Add PHPUnit test namespaces.
+      $this->testNamespaces["Drupal\\Tests\\$name\\Unit\\"][] = "$base_path/tests/src/Unit";
+      $this->testNamespaces["Drupal\\Tests\\$name\\Functional\\"][] = "$base_path/tests/src/Functional";
     }
 
     foreach ($this->testNamespaces as $prefix => $paths) {
@@ -128,6 +136,9 @@ class TestDiscovery {
    * @todo Add base class groups 'Kernel' + 'Web', complementing 'PHPUnit'.
    */
   public function getTestClasses($extension = NULL) {
+    $reader = new SimpleAnnotationReader();
+    $reader->addNamespace('Drupal\\simpletest\\Annotation');
+
     if (!isset($extension)) {
       if ($this->cacheBackend && $cache = $this->cacheBackend->get('simpletest:discovery:classes')) {
         return $cache->data;
@@ -144,24 +155,16 @@ class TestDiscovery {
     $this->classLoader->addClassMap($classmap);
 
     foreach ($classmap as $classname => $pathname) {
+      $finder = MockFileFinder::create($pathname);
+      $parser = new StaticReflectionParser($classname, $finder, TRUE);
       try {
-        $class = new \ReflectionClass($classname);
+        $info = static::getTestInfo($classname, $parser->getDocComment());
       }
-      catch (\ReflectionException $e) {
-        // Re-throw with expected pathname.
-        $message = $e->getMessage() . " in expected $pathname";
-        throw new \ReflectionException($message, $e->getCode(), $e);
-      }
-      // Skip interfaces, abstract classes, and traits.
-      if (!$class->isInstantiable()) {
+      catch (\LogicException $e) {
+        // If the class is missing a summary line or an @group annotation just
+        // skip it. Most likely it is an abstract class, trait or test fixture.
         continue;
       }
-      // Skip non-test classes.
-      if (!$class->isSubclassOf('Drupal\simpletest\TestBase') && !$class->isSubclassOf('PHPUnit_Framework_TestCase')) {
-        continue;
-      }
-      $info = static::getTestInfo($class);
-
       // Skip this test class if it requires unavailable modules.
       // @todo PHPUnit skips tests with unmet requirements when executing a test
       //   (instead of excluding them upfront). Refactor test runner to follow
@@ -207,7 +210,9 @@ class TestDiscovery {
     $classmap = array();
     $namespaces = $this->registerTestNamespaces();
     if (isset($extension)) {
-      $namespaces = array_intersect_key($namespaces, array_flip(preg_grep('/' . preg_quote("Drupal\\$extension\\", '/') . '/', array_keys($namespaces))));
+      // Include tests in the \Drupal\Tests\{$extension} namespace.
+      $pattern = "/Drupal\\\(Tests\\\)?$extension\\\/";
+      $namespaces = array_intersect_key($namespaces, array_flip(preg_grep($pattern, array_keys($namespaces))));
     }
     foreach ($namespaces as $namespace => $paths) {
       foreach ($paths as $path) {
@@ -273,8 +278,11 @@ class TestDiscovery {
   /**
    * Retrieves information about a test class for UI purposes.
    *
-   * @param \ReflectionClass $class
-   *   The reflected test class.
+   * @param string $class
+   *   The test classname.
+   * @param string $doc_comment
+   *   (optional) The class PHPDoc comment. If not passed in reflection will be
+   *   used but this is very expensive when parsing all the test classes.
    *
    * @return array
    *   An associative array containing:
@@ -285,79 +293,56 @@ class TestDiscovery {
    *     PHPDoc annotations:
    *     - module: List of Drupal module extension names the test depends on.
    *
-   * @throws \LogicException
+   * @throws \Drupal\simpletest\Exception\MissingSummaryLineException
    *   If the class does not have a PHPDoc summary line or @coversDefaultClass
    *   annotation.
-   * @throws \LogicException
+   * @throws \Drupal\simpletest\Exception\MissingGroupException
    *   If the class does not have a @group annotation.
    */
-  public static function getTestInfo(\ReflectionClass $class) {
-    $classname = $class->getName();
+  public static function getTestInfo($classname, $doc_comment = NULL) {
+    if (!$doc_comment) {
+      $reflection = new \ReflectionClass($classname);
+      $doc_comment = $reflection->getDocComment();
+    }
     $info = array(
       'name' => $classname,
     );
-
-    // Automatically convert @coversDefaultClass into summary.
-    $annotations = static::parseTestClassAnnotations($class);
-    if (isset($annotations['coversDefaultClass'][0])) {
-      $info['description'] = 'Tests ' . $annotations['coversDefaultClass'][0] . '.';
-    }
-    elseif ($summary = static::parseTestClassSummary($class)) {
-      $info['description'] = $summary;
-    }
-    else {
-      throw new \LogicException(sprintf('Missing PHPDoc summary line on %s in %s.', $classname, $class->getFileName()));
-    }
-
-    // Reduce to @group and @requires.
-    $info += array_intersect_key($annotations, array('group' => 1, 'requires' => 1));
-
-    // @todo Remove legacy getInfo() methods.
-    if (method_exists($classname, 'getInfo')) {
-      $legacy_info = $classname::getInfo();
-
-      // Derive the primary @group from the namespace to ensure that legacy
-      // tests are not located in different groups than converted tests.
-      $classparts = explode('\\', $classname);
-      if ($classparts[1] === 'Tests') {
-        if ($classparts[2] === 'Component' || $classparts[2] === 'Core') {
-          // Drupal\Tests\Component\{group}\...
-          $info['group'][] = $classparts[3];
+    $annotations = array();
+    preg_match_all('/^ \* \@([^\s]*) (.*$)/m', $doc_comment, $matches);
+    if (isset($matches[1])) {
+      foreach ($matches[1] as $key => $annotation) {
+        if (!empty($annotations[$annotation])) {
+          // Only have the first match per annotation. This deals with
+          // multiple @group annotations.
+          continue;
         }
-        else {
-          // Drupal\Tests\{group}\...
-          $info['group'][] = $classparts[2];
-        }
-      }
-      elseif ($classparts[1] === 'system' && $classparts[3] !== 'System') {
-        // Drupal\system\Tests\{group}\...
-        $info['group'][] = $classparts[3];
-      }
-      else {
-        // Drupal\{group}\Tests\...
-        $info['group'][] = $classparts[1];
-      }
-
-      if (isset($legacy_info['dependencies'])) {
-        $info += array('requires' => array());
-        $info['requires'] += array('module' => array());
-        $info['requires']['module'] = array_merge($info['requires']['module'], $legacy_info['dependencies']);
+        $annotations[$annotation] = $matches[2][$key];
       }
     }
 
-    // Process @group information.
-    // @todo Support multiple @groups + change UI to expose a group select
-    //   dropdown to filter tests by group instead of collapsible table rows.
-    // @see https://www.drupal.org/node/2296615
-    // @todo Replace single enforced PHPUnit group with base class groups.
-    if ($class->isSubclassOf('PHPUnit_Framework_TestCase')) {
+    if (empty($annotations['group'])) {
+      // Concrete tests must have a group.
+      throw new MissingGroupException(sprintf('Missing @group annotation in %s', $classname));
+    }
+    // Force all PHPUnit tests into the same group.
+    if (static::isUnitTest($classname)) {
       $info['group'] = 'PHPUnit';
     }
     else {
-      if (empty($info['group'])) {
-        throw new \LogicException("Missing @group for $classname.");
+      $info['group'] = $annotations['group'];
+    }
+
+    if (!empty($annotations['coversDefaultClass'])) {
+      $info['description'] = 'Tests ' . $annotations['coversDefaultClass'] . '.';
+    }
+    else {
+      $info['description'] = static::parseTestClassSummary($doc_comment);
+      if (empty($info['description'])) {
+        throw new MissingSummaryLineException(sprintf('Missing PHPDoc summary line in %s', $classname));
       }
-      $info['group'] = reset($info['group']);
+    }
+    if (isset($annotations['dependencies'])) {
+      $info['requires']['module'] = array_map('trim', explode(',', $annotations['dependencies']));
     }
 
     return $info;
@@ -366,32 +351,27 @@ class TestDiscovery {
   /**
    * Parses the phpDoc summary line of a test class.
    *
-   * @param \ReflectionClass $class
-   *   The reflected test class.
+   * @param string $doc_comment.
    *
    * @return string
-   *   The parsed phpDoc summary line.
+   *   The parsed phpDoc summary line. An empty string is returned if no summary
+   *   line can be parsed.
    */
-  public static function parseTestClassSummary(\ReflectionClass $class) {
-    $phpDoc = $class->getDocComment();
+  public static function parseTestClassSummary($doc_comment) {
     // Normalize line endings.
-    $phpDoc = preg_replace('/\r\n|\r/', '\n', $phpDoc);
+    $doc_comment = preg_replace('/\r\n|\r/', '\n', $doc_comment);
     // Strip leading and trailing doc block lines.
-    //$phpDoc = trim($phpDoc, "* /\n");
-    $phpDoc = substr($phpDoc, 4, -4);
+    $doc_comment = substr($doc_comment, 4, -4);
 
-    // Extract actual phpDoc content.
-    $phpDoc = explode("\n", $phpDoc);
-    array_walk($phpDoc, function (&$value) {
-      $value = trim($value, "* /\n");
-    });
-
-    // Extract summary; allowed to it wrap and continue on next line.
-    list($summary) = explode("\n\n", implode("\n", $phpDoc));
-    if ($summary === '') {
-      throw new \LogicException(sprintf('Missing phpDoc on %s.', $class->getName()));
+    $lines = explode("\n", $doc_comment);
+    $summary = [];
+    foreach ($lines as $line) {
+      if ($line == ' *' || preg_match('/^ \* \@/', $line)) {
+        break;
+      }
+      $summary[] = trim($line, ' *');
     }
-    return $summary;
+    return implode(' ', $summary);
   }
 
   /**
@@ -431,13 +411,38 @@ class TestDiscovery {
   }
 
   /**
+   * Determines if the provided classname is a unit test.
+   *
+   * @param $classname
+   *   The test classname.
+   *
+   * @return bool
+   *   TRUE if the class is a unit test. FALSE if not.
+   */
+  public static function isUnitTest($classname) {
+    if (strpos($classname, 'Drupal\\Tests\\') === 0) {
+      $namespace = explode('\\', $classname);
+      $first_letter = Unicode::substr($namespace[2], 0, 1);
+      if (Unicode::strtoupper($first_letter) === $first_letter) {
+        // A core unit test.
+        return TRUE;
+      }
+      elseif ($namespace[3] == 'Unit') {
+        // A module unit test.
+        return TRUE;
+      }
+    }
+    return FALSE;
+  }
+
+  /**
    * Returns all available extensions.
    *
    * @return \Drupal\Core\Extension\Extension[]
    *   An array of Extension objects, keyed by extension name.
    */
   protected function getExtensions() {
-    $listing = new ExtensionDiscovery();
+    $listing = new ExtensionDiscovery(DRUPAL_ROOT);
     // Ensure that tests in all profiles are discovered.
     $listing->setProfileDirectories(array());
     $extensions = $listing->scan('module', TRUE);

@@ -46,7 +46,6 @@ class RouteCompiler extends SymfonyRouteCompiler implements RouteCompilerInterfa
     $num_parts = count(explode('/', trim($pattern_outline, '/')));
 
     return new CompiledRoute(
-      $route,
       $fit,
       $pattern_outline,
       $num_parts,
@@ -95,7 +94,7 @@ class RouteCompiler extends SymfonyRouteCompiler implements RouteCompilerInterfa
     $slashes = $number_parts - 1;
     // The fit value is a binary number which has 1 at every fixed path
     // position and 0 where there is a wildcard. We keep track of all such
-    // patterns that exist so that we can minimize the the number of path
+    // patterns that exist so that we can minimize the number of path
     // patterns we need to check in the RouteProvider.
     $fit = 0;
     foreach ($parts as $k => $part) {

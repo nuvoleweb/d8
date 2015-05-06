@@ -7,23 +7,23 @@
 
 namespace Drupal\system\Tests\File;
 
-use Drupal\Component\Utility\String;
-use Drupal\simpletest\DrupalUnitTestBase;
+use Drupal\Component\Utility\SafeMarkup;
+use Drupal\simpletest\KernelTestBase;
 
 /**
  * Tests .htaccess file saving.
  *
  * @group File
  */
-class HtaccessUnitTest extends DrupalUnitTestBase {
+class HtaccessUnitTest extends KernelTestBase {
 
   /**
    * Tests file_save_htaccess().
    */
   function testHtaccessSave() {
     // Prepare test directories.
-    $public = $this->public_files_directory . '/test/public';
-    $private = $this->public_files_directory . '/test/private';
+    $public = $this->publicFilesDirectory . '/test/public';
+    $private = $this->publicFilesDirectory . '/test/private';
     $stream = 'public://test/stream';
 
     // Verify that file_save_htaccess() returns FALSE if .htaccess cannot be
@@ -89,7 +89,7 @@ class HtaccessUnitTest extends DrupalUnitTestBase {
    */
   protected function assertFilePermissions($uri, $expected) {
     $actual = fileperms($uri) & 0777;
-    return $this->assertIdentical($actual, $expected, String::format('@uri file permissions @actual are identical to @expected.', array(
+    return $this->assertIdentical($actual, $expected, SafeMarkup::format('@uri file permissions @actual are identical to @expected.', array(
       '@uri' => $uri,
       '@actual' => 0 . decoct($actual),
       '@expected' => 0 . decoct($expected),

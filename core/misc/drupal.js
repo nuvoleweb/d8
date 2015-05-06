@@ -1,7 +1,7 @@
 /**
  * Base framework for Drupal-specific JavaScript, behaviors, and settings.
  */
-window.Drupal = { behaviors: {}, locale: {} };
+window.Drupal = {behaviors: {}};
 
 // Class indicating that JS is enabled; used for styling purpose.
 document.documentElement.className += ' js';
@@ -13,7 +13,7 @@ if (window.jQuery) {
 
 // JavaScript should be made compatible with libraries other than jQuery by
 // wrapping it in an anonymous closure.
-(function (domready, Drupal, drupalSettings) {
+(function (domready, Drupal, drupalSettings, drupalTranslations) {
 
   "use strict";
 
@@ -32,7 +32,8 @@ if (window.jQuery) {
     // Makes the list of errors readable.
     var messageList = [];
     messageList.push(this.event);
-    for (var i = 0, il = this.list.length; i < il; i++) {
+    var il = this.list.length;
+    for (var i = 0; i < il; i++) {
       messageList.push(this.list[i].behavior + ': ' + this.list[i].error.message);
     }
     this.message = messageList.join(' ; ');
@@ -81,16 +82,17 @@ if (window.jQuery) {
   Drupal.attachBehaviors = function (context, settings) {
     context = context || document;
     settings = settings || drupalSettings;
-    var i, errors = [], behaviors = Drupal.behaviors;
+    var errors = [];
+    var behaviors = Drupal.behaviors;
     // Execute all of them.
-    for (i in behaviors) {
+    for (var i in behaviors) {
       if (behaviors.hasOwnProperty(i) && typeof behaviors[i].attach === 'function') {
         // Don't stop the execution of behaviors in case of an error.
         try {
           behaviors[i].attach(context, settings);
         }
         catch (e) {
-          errors.push({ behavior: i, error: e });
+          errors.push({behavior: i, error: e});
         }
       }
     }
@@ -111,10 +113,10 @@ if (window.jQuery) {
    * to be processed, in order to allow special behaviors to detach from the
    * content.
    *
-   * Such implementations should look for the class name that was added in their
-   * corresponding Drupal.behaviors.behaviorName.attach implementation, i.e.
-   * behaviorName-processed, to ensure the behavior is detached only from
-   * previously processed elements.
+   * Such implementations should use .findOnce() and .removeOnce() to find
+   * elements with their corresponding Drupal.behaviors.behaviorName.attach
+   * implementation, i.e. .removeOnce('behaviorName'), to ensure the behavior is
+   * detached only from previously processed elements.
    *
    * @param context
    *   An element to detach behaviors from. If none is given, the document element
@@ -147,16 +149,17 @@ if (window.jQuery) {
     context = context || document;
     settings = settings || drupalSettings;
     trigger = trigger || 'unload';
-    var i, errors = [], behaviors = Drupal.behaviors;
+    var errors = [];
+    var behaviors = Drupal.behaviors;
     // Execute all of them.
-    for (i in behaviors) {
+    for (var i in behaviors) {
       if (behaviors.hasOwnProperty(i) && typeof behaviors[i].detach === 'function') {
         // Don't stop the execution of behaviors in case of an error.
         try {
           behaviors[i].detach(context, settings, trigger);
         }
         catch (e) {
-          errors.push({ behavior: i, error: e });
+          errors.push({behavior: i, error: e});
         }
       }
     }
@@ -214,26 +217,29 @@ if (window.jQuery) {
    * @ingroup sanitization
    */
   Drupal.formatString = function (str, args) {
+    // Keep args intact.
+    var processedArgs = {};
     // Transform arguments before inserting them.
     for (var key in args) {
       if (args.hasOwnProperty(key)) {
         switch (key.charAt(0)) {
           // Escaped only.
           case '@':
-            args[key] = Drupal.checkPlain(args[key]);
+            processedArgs[key] = Drupal.checkPlain(args[key]);
             break;
           // Pass-through.
           case '!':
+            processedArgs[key] = args[key];
             break;
           // Escaped and placeholder.
           default:
-            args[key] = Drupal.theme('placeholder', args[key]);
+            processedArgs[key] = Drupal.theme('placeholder', args[key]);
             break;
         }
       }
     }
 
-    return Drupal.stringReplace(str, args, null);
+    return Drupal.stringReplace(str, processedArgs, null);
   };
 
   /**
@@ -312,8 +318,8 @@ if (window.jQuery) {
     options.context = options.context || '';
 
     // Fetch the localized version of the string.
-    if (Drupal.locale.strings && Drupal.locale.strings[options.context] && Drupal.locale.strings[options.context][str]) {
-      str = Drupal.locale.strings[options.context][str];
+    if (typeof drupalTranslations !== 'undefined' && drupalTranslations.strings && drupalTranslations.strings[options.context] && drupalTranslations.strings[options.context][str]) {
+      str = drupalTranslations.strings[options.context][str];
     }
 
     if (args) {
@@ -326,7 +332,7 @@ if (window.jQuery) {
    * Returns the URL to a Drupal page.
    */
   Drupal.url = function (path) {
-    return drupalSettings.path.basePath + drupalSettings.path.scriptPath + drupalSettings.path.pathPrefix + path;
+    return drupalSettings.path.baseUrl + drupalSettings.path.pathPrefix + path;
   };
 
   /**
@@ -336,8 +342,9 @@ if (window.jQuery) {
    * Drupal.t() is called by this function, make sure not to pass
    * already-localized strings to it.
    *
-   * See the documentation of the server-side format_plural() function for
-   * further details.
+   * See the documentation of the server-side
+   * \Drupal\Core\StringTranslation\TranslationInterface::formatPlural()
+   * function for more details.
    *
    * @param {Number} count
    *   The item count to display.
@@ -365,13 +372,13 @@ if (window.jQuery) {
     args = args || {};
     args['@count'] = count;
 
-    var pluralDelimiter = drupalSettings.locale.pluralDelimiter,
-      translations = Drupal.t(singular + pluralDelimiter + plural, args, options).split(pluralDelimiter),
-      index = 0;
+    var pluralDelimiter = drupalSettings.pluralDelimiter;
+    var translations = Drupal.t(singular + pluralDelimiter + plural, args, options).split(pluralDelimiter);
+    var index = 0;
 
     // Determine the index of the plural form.
-    if (Drupal.locale.pluralFormula) {
-      index = count in Drupal.locale.pluralFormula ? Drupal.locale.pluralFormula[count] : Drupal.locale.pluralFormula['default'];
+    if (typeof drupalTranslations !== 'undefined' && drupalTranslations.pluralFormula) {
+      index = count in drupalTranslations.pluralFormula ? drupalTranslations.pluralFormula[count] : drupalTranslations.pluralFormula['default'];
     }
     else if (args['@count'] !== 1) {
       index = 1;
@@ -428,4 +435,4 @@ if (window.jQuery) {
     return '<em class="placeholder">' + Drupal.checkPlain(str) + '</em>';
   };
 
-})(domready, Drupal, window.drupalSettings);
+})(domready, Drupal, window.drupalSettings, window.drupalTranslations);

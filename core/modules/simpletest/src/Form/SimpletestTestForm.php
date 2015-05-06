@@ -8,7 +8,7 @@
 namespace Drupal\simpletest\Form;
 
 use Drupal\Component\Utility\SortArray;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 
@@ -98,17 +98,10 @@ class SimpletestTestForm extends FormBase {
       '#title' => $this->t('Collapse'),
       '#suffix' => '<a href="#" class="simpletest-collapse">(' . $this->t('Collapse') . ')</a>',
     );
-    $form['tests']['#attached']['js'][] = array(
-      'type' => 'setting',
-      'data' => array(
-        'simpleTest' => array(
-          'images' => array(
-            drupal_render($image_collapsed),
-            drupal_render($image_extended),
-          ),
-        ),
-      ),
-    );
+    $form['tests']['#attached']['drupalSettings']['simpleTest']['images'] = [
+      drupal_render($image_collapsed),
+      drupal_render($image_extended),
+    ];
 
     // Generate the list of tests arranged by group.
     $groups = simpletest_test_get_all();
@@ -151,14 +144,14 @@ class SimpletestTestForm extends FormBase {
         );
         $form['tests'][$class]['title'] = array(
           '#type' => 'label',
-          '#title' => $info['name'],
+          '#title' => '\\' . $info['name'],
           '#wrapper_attributes' => array(
             'class' => array('simpletest-test-label', 'table-filter-text-source'),
           ),
         );
         $form['tests'][$class]['description'] = array(
           '#prefix' => '<div class="description">',
-          '#markup' => String::checkPlain($info['description']),
+          '#markup' => SafeMarkup::checkPlain($info['description']),
           '#suffix' => '</div>',
           '#wrapper_attributes' => array(
             'class' => array('simpletest-test-description', 'table-filter-text-source'),
@@ -186,6 +179,7 @@ class SimpletestTestForm extends FormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
+    global $base_url;
     // Test discovery does not run upon form submission.
     simpletest_classloader_register();
 
@@ -216,6 +210,7 @@ class SimpletestTestForm extends FormBase {
       }
     }
     if (!empty($tests_list)) {
+      putenv('SIMPLETEST_BASE_URL=' . $base_url);
       $test_id = simpletest_run_tests($tests_list, 'drupal');
       $form_state->setRedirect(
         'simpletest.result_form',

@@ -28,22 +28,21 @@ class TestItem extends FieldItemBase {
   /**
    * {@inheritdoc}
    */
-  public static function defaultSettings() {
+  public static function defaultStorageSettings() {
     return array(
       'test_field_storage_setting' => 'dummy test string',
       'changeable' => 'a changeable field storage setting',
       'unchangeable' => 'an unchangeable field storage setting',
-    ) + parent::defaultSettings();
+    ) + parent::defaultStorageSettings();
   }
 
   /**
    * {@inheritdoc}
    */
-  public static function defaultInstanceSettings() {
+  public static function defaultFieldSettings() {
     return array(
-      'test_instance_setting' => 'dummy test string',
-      'test_cached_data' => FALSE,
-    ) + parent::defaultInstanceSettings();
+      'test_field_setting' => 'dummy test string',
+    ) + parent::defaultFieldSettings();
   }
 
   /**
@@ -51,7 +50,8 @@ class TestItem extends FieldItemBase {
    */
   public static function propertyDefinitions(FieldStorageDefinitionInterface $field_definition) {
     $properties['value'] = DataDefinition::create('integer')
-      ->setLabel(t('Test integer value'));
+      ->setLabel(t('Test integer value'))
+      ->setRequired(TRUE);
 
     return $properties;
   }
@@ -65,7 +65,6 @@ class TestItem extends FieldItemBase {
         'value' => array(
           'type' => 'int',
           'size' => 'medium',
-          'not null' => FALSE,
         ),
       ),
       'indexes' => array(
@@ -77,7 +76,7 @@ class TestItem extends FieldItemBase {
   /**
    * {@inheritdoc}
    */
-  public function settingsForm(array &$form, FormStateInterface $form_state, $has_data) {
+  public function storageSettingsForm(array &$form, FormStateInterface $form_state, $has_data) {
     $form['test_field_storage_setting'] = array(
       '#type' => 'textfield',
       '#title' => t('Field test field storage setting'),
@@ -92,13 +91,13 @@ class TestItem extends FieldItemBase {
   /**
    * {@inheritdoc}
    */
-  public function instanceSettingsForm(array $form, FormStateInterface $form_state) {
-    $form['test_instance_setting'] = array(
+  public function fieldSettingsForm(array $form, FormStateInterface $form_state) {
+    $form['test_field_setting'] = array(
       '#type' => 'textfield',
-      '#title' => t('Field test field instance setting'),
-      '#default_value' => $this->getSetting('test_instance_setting'),
+      '#title' => t('Field test field setting'),
+      '#default_value' => $this->getSetting('test_field_setting'),
       '#required' => FALSE,
-      '#description' => t('A dummy form element to simulate field instance setting.'),
+      '#description' => t('A dummy form element to simulate field setting.'),
     );
 
     return $form;
@@ -136,6 +135,42 @@ class TestItem extends FieldItemBase {
    */
   public function isEmpty() {
     return empty($this->value);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function storageSettingsToConfigData(array $settings) {
+    $settings['config_data_from_storage_setting'] = 'TRUE';
+    unset($settings['storage_setting_from_config_data']);
+    return $settings;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function storageSettingsFromConfigData(array $settings) {
+    $settings['storage_setting_from_config_data'] = 'TRUE';
+    unset($settings['config_data_from_storage_setting']);
+    return $settings;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function fieldSettingsToConfigData(array $settings) {
+    $settings['config_data_from_field_setting'] = 'TRUE';
+    unset($settings['field_setting_from_config_data']);
+    return $settings;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function fieldSettingsFromConfigData(array $settings) {
+    $settings['field_setting_from_config_data'] = 'TRUE';
+    unset($settings['config_data_from_field_setting']);
+    return $settings;
   }
 
 }

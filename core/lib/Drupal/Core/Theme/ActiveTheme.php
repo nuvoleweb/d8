@@ -60,25 +60,11 @@ class ActiveTheme {
   protected $extension;
 
   /**
-   * The provided stylesheet of the theme.
-   *
-   * @var array
-   */
-  protected $styleSheets;
-
-  /**
    * The stylesheets which are set to be removed by the theme.
    *
    * @var array
    */
   protected $styleSheetsRemove;
-
-  /**
-   * The stylesheets which are overridden by the theme.
-   *
-   * @var array
-   */
-  protected $styleSheetsOverride;
 
   /**
    * The libraries provided by the theme.
@@ -94,13 +80,21 @@ class ActiveTheme {
    *   The properties of the object, keyed by the names.
    */
   public function __construct(array $values) {
+    $values += [
+      'path' => '',
+      'engine' => 'twig',
+      'owner' => 'twig',
+      'stylesheets_remove' => [],
+      'libraries' => [],
+      'extension' => 'html.twig',
+      'base_themes' => [],
+    ];
+
     $this->name = $values['name'];
     $this->path = $values['path'];
     $this->engine = $values['engine'];
     $this->owner = $values['owner'];
-    $this->styleSheets = $values['stylesheets'];
     $this->styleSheetsRemove = $values['stylesheets_remove'];
-    $this->styleSheetsOverride = $values['stylesheets_override'];
     $this->libraries = $values['libraries'];
     $this->extension = $values['extension'];
     $this->baseThemes = $values['base_themes'];
@@ -163,24 +157,6 @@ class ActiveTheme {
   }
 
   /**
-   * Returns the stylesheets provided by the theme.
-   *
-   * @return mixed
-   */
-  public function getStyleSheets() {
-    return $this->styleSheets;
-  }
-
-  /**
-   * Returns the overridden stylesheets by the theme.
-   *
-   * @return mixed
-   */
-  public function getStyleSheetsOverride() {
-    return $this->styleSheetsOverride;
-  }
-
-  /**
    * Returns the removed stylesheets by the theme.
    *
    * @return mixed
@@ -191,6 +167,9 @@ class ActiveTheme {
 
   /**
    * Returns an array of base theme active theme objects keyed by name.
+   *
+   * The order starts with the base theme of $this and ends with the root of
+   * the dependency chain.
    *
    * @return static[]
    */

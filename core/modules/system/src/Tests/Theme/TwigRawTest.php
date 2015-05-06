@@ -7,7 +7,6 @@
 
 namespace Drupal\system\Tests\Theme;
 
-use Drupal\Component\Utility\String;
 use Drupal\simpletest\WebTestBase;
 
 /**
@@ -33,7 +32,7 @@ class TwigRawTest extends WebTestBase {
       '#script' => '<script>alert("This alert is real because I will put it through the raw filter!");</script>',
     );
     $rendered = drupal_render($test);
-    $this->drupalSetContent($rendered);
+    $this->setRawContent($rendered);
     $this->assertRaw('<script>alert("This alert is real because I will put it through the raw filter!");</script>');
   }
 
@@ -51,7 +50,7 @@ class TwigRawTest extends WebTestBase {
     ];
     $rendered = drupal_render($build);
     $this->setRawContent($rendered);
-    $this->assertRaw(String::checkPlain($script));
+    $this->assertEscaped($script);
   }
 
 }

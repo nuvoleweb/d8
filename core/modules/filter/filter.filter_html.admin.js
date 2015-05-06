@@ -15,7 +15,8 @@
     Drupal.filterConfiguration.liveSettingParsers.filter_html = {
       getRules: function () {
         var currentValue = $('#edit-filters-filter-html-settings-allowed-html').val();
-        var rules = [], rule;
+        var rules = [];
+        var rule;
 
         // Build a FilterHTMLRule that reflects the hard-coded behavior that
         // strips all "style" attribute and all "on*" attributes.
@@ -55,7 +56,7 @@
 
     attach: function (context, settings) {
       var that = this;
-      $(context).find('[name="filters[filter_html][settings][allowed_html]"]').once('filter-filter_html-updating', function () {
+      $(context).find('[name="filters[filter_html][settings][allowed_html]"]').once('filter-filter_html-updating').each(function () {
         that.$allowedHTMLFormItem = $(this);
         that.$allowedHTMLDescription = that.$allowedHTMLFormItem.closest('.form-item').find('.description');
         that.userTags = that._parseSetting(this.value);
@@ -177,7 +178,7 @@
     var html = '';
     var tagList = '<' + tags.join('> <') + '>';
     html += '<p class="editor-update-message">';
-    html += Drupal.t('Based on the text editor configuration, these tags have automatically been added: <strong>@tag-list</strong>.', { '@tag-list': tagList });
+    html += Drupal.t('Based on the text editor configuration, these tags have automatically been added: <strong>@tag-list</strong>.', {'@tag-list': tagList});
     html += '</p>';
     return html;
   };

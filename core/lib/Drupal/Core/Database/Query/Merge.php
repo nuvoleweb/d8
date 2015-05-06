@@ -119,7 +119,7 @@ class Merge extends Query implements ConditionInterface {
   /**
    * Flag indicating whether an UPDATE is necessary.
    *
-   * @var boolean
+   * @var bool
    */
   protected $needsUpdate = FALSE;
 
@@ -342,7 +342,7 @@ class Merge extends Query implements ConditionInterface {
   /**
    * Implements Drupal\Core\Database\Query\ConditionInterface::condition().
    */
-  public function condition($field, $value = NULL, $operator = NULL) {
+  public function condition($field, $value = NULL, $operator = '=') {
     $this->condition->condition($field, $value, $operator);
     return $this;
   }

@@ -7,7 +7,7 @@
  * This file handles tokens for the global 'site' and 'date' tokens.
  */
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Component\Utility\Xss;
 
 /**
@@ -92,7 +92,7 @@ function system_tokens($type, $tokens, array $data = array(), array $options = a
 
   $url_options = array('absolute' => TRUE);
   if (isset($options['langcode'])) {
-    $url_options['language'] = language_load($options['langcode']);
+    $url_options['language'] = \Drupal::languageManager()->getLanguage($options['langcode']);
     $langcode = $options['langcode'];
   }
   else {
@@ -107,7 +107,7 @@ function system_tokens($type, $tokens, array $data = array(), array $options = a
       switch ($name) {
         case 'name':
           $site_name = \Drupal::config('system.site')->get('name');
-          $replacements[$original] = $sanitize ? String::checkPlain($site_name) : $site_name;
+          $replacements[$original] = $sanitize ? SafeMarkup::checkPlain($site_name) : $site_name;
           break;
 
         case 'slogan':
@@ -120,15 +120,15 @@ function system_tokens($type, $tokens, array $data = array(), array $options = a
           break;
 
         case 'url':
-          $replacements[$original] = url('<front>', $url_options);
+          $replacements[$original] = \Drupal::url('<front>', array(), $url_options);
           break;
 
         case 'url-brief':
-          $replacements[$original] = preg_replace(array('!^https?://!', '!/$!'), '', url('<front>', $url_options));
+          $replacements[$original] = preg_replace(array('!^https?://!', '!/$!'), '', \Drupal::url('<front>', array(), $url_options));
           break;
 
         case 'login-url':
-          $replacements[$original] = url('user', $url_options);
+          $replacements[$original] = \Drupal::url('user.page', [], $url_options);
           break;
       }
     }
@@ -161,7 +161,7 @@ function system_tokens($type, $tokens, array $data = array(), array $options = a
           break;
 
         case 'raw':
-          $replacements[$original] = $sanitize ? String::checkPlain($date) : $date;
+          $replacements[$original] = $sanitize ? SafeMarkup::checkPlain($date) : $date;
           break;
       }
     }

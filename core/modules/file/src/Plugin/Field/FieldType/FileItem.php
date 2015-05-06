@@ -13,6 +13,7 @@ use Drupal\Core\Field\FieldDefinitionInterface;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\Field\Plugin\Field\FieldType\EntityReferenceItem;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\StreamWrapper\StreamWrapperInterface;
 use Drupal\Core\TypedData\DataDefinition;
 
 /**
@@ -22,9 +23,11 @@ use Drupal\Core\TypedData\DataDefinition;
  *   id = "file",
  *   label = @Translation("File"),
  *   description = @Translation("This field stores the ID of a file as an integer value."),
+ *   category = @Translation("Reference"),
  *   default_widget = "file_generic",
  *   default_formatter = "file_default",
- *   list_class = "\Drupal\file\Plugin\Field\FieldType\FileFieldItemList"
+ *   list_class = "\Drupal\file\Plugin\Field\FieldType\FileFieldItemList",
+ *   constraints = {"ValidReference" = {}, "ReferenceAccess" = {}}
  * )
  */
 class FileItem extends EntityReferenceItem {
@@ -32,25 +35,25 @@ class FileItem extends EntityReferenceItem {
   /**
    * {@inheritdoc}
    */
-  public static function defaultSettings() {
+  public static function defaultStorageSettings() {
     return array(
       'target_type' => 'file',
       'display_field' => FALSE,
       'display_default' => FALSE,
       'uri_scheme' => file_default_scheme(),
-    ) + parent::defaultSettings();
+    ) + parent::defaultStorageSettings();
   }
 
   /**
    * {@inheritdoc}
    */
-  public static function defaultInstanceSettings() {
+  public static function defaultFieldSettings() {
     return array(
       'file_extensions' => 'txt',
       'file_directory' => '',
       'max_filesize' => '',
       'description_field' => 0,
-    ) + parent::defaultInstanceSettings();
+    ) + parent::defaultFieldSettings();
   }
 
   /**
@@ -62,7 +65,6 @@ class FileItem extends EntityReferenceItem {
         'target_id' => array(
           'description' => 'The ID of the file entity.',
           'type' => 'int',
-          'not null' => TRUE,
           'unsigned' => TRUE,
         ),
         'display' => array(
@@ -70,13 +72,11 @@ class FileItem extends EntityReferenceItem {
           'type' => 'int',
           'size' => 'tiny',
           'unsigned' => TRUE,
-          'not null' => TRUE,
           'default' => 1,
         ),
         'description' => array(
           'description' => 'A description of the file.',
           'type' => 'text',
-          'not null' => FALSE,
         ),
       ),
       'indexes' => array(
@@ -98,10 +98,11 @@ class FileItem extends EntityReferenceItem {
     $properties = parent::propertyDefinitions($field_definition);
 
     $properties['display'] = DataDefinition::create('boolean')
-      ->setLabel(t('Flag to control whether this file should be displayed when viewing content'));
+      ->setLabel(t('Display'))
+      ->setDescription(t('Flag to control whether this file should be displayed when viewing content'));
 
     $properties['description'] = DataDefinition::create('string')
-      ->setLabel(t('A description of the file'));
+      ->setLabel(t('Description'));
 
     return $properties;
   }
@@ -109,7 +110,7 @@ class FileItem extends EntityReferenceItem {
   /**
    * {@inheritdoc}
    */
-  public function settingsForm(array &$form, FormStateInterface $form_state, $has_data) {
+  public function storageSettingsForm(array &$form, FormStateInterface $form_state, $has_data) {
     $element = array();
 
     $element['#attached']['library'][] = 'file/drupal.file';
@@ -127,15 +128,12 @@ class FileItem extends EntityReferenceItem {
       '#description' => t('This setting only has an effect if the display option is enabled.'),
       '#states' => array(
         'visible' => array(
-          ':input[name="field[settings][display_field]"]' => array('checked' => TRUE),
+          ':input[name="settings[display_field]"]' => array('checked' => TRUE),
         ),
       ),
     );
 
-    $scheme_options = array();
-    foreach (file_get_stream_wrappers(STREAM_WRAPPERS_WRITE_VISIBLE) as $scheme => $stream_wrapper) {
-      $scheme_options[$scheme] = $stream_wrapper['name'];
-    }
+    $scheme_options = \Drupal::service('stream_wrapper_manager')->getNames(StreamWrapperInterface::WRITE_VISIBLE);
     $element['uri_scheme'] = array(
       '#type' => 'radios',
       '#title' => t('Upload destination'),
@@ -151,7 +149,7 @@ class FileItem extends EntityReferenceItem {
   /**
    * {@inheritdoc}
    */
-  public function instanceSettingsForm(array $form, FormStateInterface $form_state) {
+  public function fieldSettingsForm(array $form, FormStateInterface $form_state) {
     $element = array();
     $settings = $this->getSettings();
 
@@ -209,19 +207,19 @@ class FileItem extends EntityReferenceItem {
    * value.
    *
    * This function is assigned as an #element_validate callback in
-   * instanceSettingsForm().
+   * fieldSettingsForm().
    */
   public static function validateDirectory($element, FormStateInterface $form_state) {
     // Strip slashes from the beginning and end of $element['file_directory'].
     $value = trim($element['#value'], '\\/');
-    form_set_value($element, $value, $form_state);
+    $form_state->setValueForElement($element, $value);
   }
 
   /**
    * Form API callback.
    *
    * This function is assigned as an #element_validate callback in
-   * instanceSettingsForm().
+   * fieldSettingsForm().
    *
    * This doubles as a convenience clean-up function and a validation routine.
    * Commas are allowed by the end-user, but ultimately the value will be stored
@@ -236,7 +234,7 @@ class FileItem extends EntityReferenceItem {
         $form_state->setError($element, t('The list of allowed extensions is not valid, be sure to exclude leading dots and to separate extensions with a comma or space.'));
       }
       else {
-        form_set_value($element, $extensions, $form_state);
+        $form_state->setValueForElement($element, $extensions);
       }
     }
   }
@@ -248,7 +246,7 @@ class FileItem extends EntityReferenceItem {
    * \Drupal\Component\Utility\Bytes::toInt().
    *
    * This function is assigned as an #element_validate callback in
-   * instanceSettingsForm().
+   * fieldSettingsForm().
    */
   public static function validateMaxFilesize($element, FormStateInterface $form_state) {
     if (!empty($element['#value']) && !is_numeric(Bytes::toInt($element['#value']))) {
@@ -257,7 +255,7 @@ class FileItem extends EntityReferenceItem {
   }
 
   /**
-   * Determines the URI for a file field instance.
+   * Determines the URI for a file field.
    *
    * @param $data
    *   An array of token objects to pass to token_replace().

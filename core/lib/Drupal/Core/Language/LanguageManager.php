@@ -7,10 +7,11 @@
 
 namespace Drupal\Core\Language;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\DependencyInjection\DependencySerializationTrait;
 use Drupal\Core\StringTranslation\TranslationInterface;
 use Drupal\Core\StringTranslation\TranslationWrapper;
+use Drupal\Core\Url;
 
 /**
  * Class responsible for providing language support on language-unaware sites.
@@ -26,11 +27,17 @@ class LanguageManager implements LanguageManagerInterface {
   protected $translation;
 
   /**
-   * An array of all the available languages keyed by language code.
+   * A static cache of translated language lists.
    *
-   * @var array
+   * Array of arrays to cache the result of self::getLanguages() keyed by the
+   * language the list is translated to (first level) and the flags provided to
+   * the method (second level).
+   *
+   * @var \Drupal\Core\Language\LanguageInterface[]
+   *
+   * @see \Drupal\Core\Language\LanguageManager::getLanguages()
    */
-  protected $languages;
+  protected $languages = array();
 
   /**
    * The default language object.
@@ -62,7 +69,7 @@ class LanguageManager implements LanguageManagerInterface {
    * @see \Drupal\Core\StringTranslation\TranslationInterface()
    */
   protected function t($string, array $args = array(), array $options = array()) {
-    return $this->translation ? $this->translation->translate($string, $args, $options) : String::format($string, $args);
+    return $this->translation ? $this->translation->translate($string, $args, $options) : SafeMarkup::format($string, $args);
   }
 
   /**
@@ -129,37 +136,19 @@ class LanguageManager implements LanguageManagerInterface {
    * {@inheritdoc}
    */
   public function getLanguages($flags = LanguageInterface::STATE_CONFIGURABLE) {
-    // Initialize master language list.
-    if (!isset($this->languages)) {
-      // No language module, so use the default language only.
+    $static_cache_id = $this->getCurrentLanguage()->getId();
+    if (!isset($this->languages[$static_cache_id][$flags])) {
+      // If this language manager is used, there are no configured languages.
+      // The default language and locked languages comprise the full language
+      // list.
       $default = $this->getDefaultLanguage();
-      $this->languages = array($default->id => $default);
-      // Add the special languages, they will be filtered later if needed.
-      $this->languages += $this->getDefaultLockedLanguages($default->weight);
+      $languages = array($default->getId() => $default);
+      $languages += $this->getDefaultLockedLanguages($default->getWeight());
+
+      // Filter the full list of languages based on the value of $flags.
+      $this->languages[$static_cache_id][$flags] = $this->filterLanguages($languages, $flags);
     }
-
-    // Filter the full list of languages based on the value of the $all flag. By
-    // default we remove the locked languages, but the caller may request for
-    // those languages to be added as well.
-    $filtered_languages = array();
-
-    // Add the site's default language if flagged as allowed value.
-    if ($flags & LanguageInterface::STATE_SITE_DEFAULT) {
-      $default = isset($default) ? $default : $this->getDefaultLanguage();
-      // Rename the default language. But we do not want to do this globally,
-      // if we're acting on a global object, so clone the object first.
-      $default = clone $default;
-      $default->name = $this->t("Site's default language (@lang_name)", array('@lang_name' => $default->name));
-      $filtered_languages['site_default'] = $default;
-    }
-
-    foreach ($this->languages as $id => $language) {
-      if (($language->locked && ($flags & LanguageInterface::STATE_LOCKED)) || (!$language->locked && ($flags & LanguageInterface::STATE_CONFIGURABLE))) {
-        $filtered_languages[$id] = $language;
-      }
-    }
-
-    return $filtered_languages;
+    return $this->languages[$static_cache_id][$flags];
   }
 
   /**
@@ -186,7 +175,7 @@ class LanguageManager implements LanguageManagerInterface {
       return $this->t('None');
     }
     if ($language = $this->getLanguage($langcode)) {
-      return $language->name;
+      return $language->getName();
     }
     if (empty($langcode)) {
       return $this->t('Unknown');
@@ -226,7 +215,7 @@ class LanguageManager implements LanguageManagerInterface {
    */
   public function isLanguageLocked($langcode) {
     $language = $this->getLanguage($langcode);
-    return ($language ? $language->locked : FALSE);
+    return ($language ? $language->isLocked() : FALSE);
   }
 
   /**
@@ -239,32 +228,21 @@ class LanguageManager implements LanguageManagerInterface {
   /**
    * {@inheritdoc}
    */
-  public function getLanguageSwitchLinks($type, $path) {
+  public function getLanguageSwitchLinks($type, Url $url) {
     return array();
   }
 
   /**
-   * Some common languages with their English and native names.
-   *
-   * Language codes are defined by the W3C language tags document for
-   * interoperability. Language codes typically have a language and, optionally,
-   * a script or regional variant name. See:
-   * http://www.w3.org/International/articles/language-tags/ for more
-   * information.
-   *
-   * This list is based on languages available from localize.drupal.org. See
-   * http://localize.drupal.org/issues for information on how to add languages
-   * there.
-   *
-   * The "Left-to-right marker" comments and the enclosed UTF-8 markers are to
-   * make otherwise strange looking PHP syntax natural (to not be displayed in
-   * right to left). See http://drupal.org/node/128866#comment-528929.
-   *
-   * @return array
-   *   An array of language code to language name information.
-   *   Language name information itself is an array of English and native names.
+   * @inheritdoc
    */
   public static function getStandardLanguageList() {
+    // This list is based on languages available from localize.drupal.org. See
+    // http://localize.drupal.org/issues for information on how to add languages
+    // there.
+    //
+    // The "Left-to-right marker" comments and the enclosed UTF-8 markers are to
+    // make otherwise strange looking PHP syntax natural (to not be displayed in
+    // right to left). See http://drupal.org/node/128866#comment-528929.
     return array(
       'af' => array('Afrikaans', 'Afrikaans'),
       'am' => array('Amharic', 'አማርኛ'),
@@ -329,8 +307,8 @@ class LanguageManager implements LanguageManagerInterface {
       'my' => array('Burmese', 'ဗမာစကား'),
       'ne' => array('Nepali', 'नेपाली'),
       'nl' => array('Dutch', 'Nederlands'),
-      'nb' => array('Norwegian Bokmål', 'Bokmål'),
-      'nn' => array('Norwegian Nynorsk', 'Nynorsk'),
+      'nb' => array('Norwegian Bokmål', 'Norsk, bokmål'),
+      'nn' => array('Norwegian Nynorsk', 'Norsk, nynorsk'),
       'oc' => array('Occitan', 'Occitan'),
       'pa' => array('Punjabi', 'ਪੰਜਾਬੀ'),
       'pl' => array('Polish', 'Polski'),
@@ -381,6 +359,56 @@ class LanguageManager implements LanguageManagerInterface {
    */
   public function getConfigOverrideLanguage() {
     return $this->getCurrentLanguage();
+  }
+
+
+  /**
+   * Filters the full list of languages based on the value of the flag.
+   *
+   * The locked languages are removed by default.
+   *
+   * @param \Drupal\Core\Language\LanguageInterface[] $languages
+   *    Array with languages to be filtered.
+   * @param int $flags
+   *   (optional) Specifies the state of the languages that have to be returned.
+   *   It can be: LanguageInterface::STATE_CONFIGURABLE,
+   *   LanguageInterface::STATE_LOCKED, or LanguageInterface::STATE_ALL.
+   *
+   * @return \Drupal\Core\Language\LanguageInterface[]
+   *   An associative array of languages, keyed by the language code.
+   */
+  protected function filterLanguages(array $languages, $flags = LanguageInterface::STATE_CONFIGURABLE) {
+    // STATE_ALL means we don't actually filter, so skip the rest of the method.
+    if ($flags == LanguageInterface::STATE_ALL) {
+      return $languages;
+    }
+
+    $filtered_languages = array();
+    // Add the site's default language if requested.
+    if ($flags & LanguageInterface::STATE_SITE_DEFAULT) {
+
+      // Setup a language to have the defaults with data appropriate of the
+      // default language only for runtime.
+      $defaultLanguage = $this->getDefaultLanguage();
+      $default = new Language(
+        array(
+          'id' => $defaultLanguage->getId(),
+          'name' => $this->t("Site's default language (@lang_name)",
+            array('@lang_name' => $defaultLanguage->getName())),
+          'direction' => $defaultLanguage->getDirection(),
+          'weight' => $defaultLanguage->getWeight(),
+        )
+      );
+      $filtered_languages[LanguageInterface::LANGCODE_SITE_DEFAULT] = $default;
+    }
+
+    foreach ($languages as $id => $language) {
+      if (($language->isLocked() && ($flags & LanguageInterface::STATE_LOCKED)) || (!$language->isLocked() && ($flags & LanguageInterface::STATE_CONFIGURABLE))) {
+        $filtered_languages[$id] = $language;
+      }
+    }
+
+    return $filtered_languages;
   }
 
 }

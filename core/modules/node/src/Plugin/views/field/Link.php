@@ -8,6 +8,7 @@
 namespace Drupal\node\Plugin\views\field;
 
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Routing\RedirectDestinationTrait;
 use Drupal\views\Plugin\views\field\FieldPluginBase;
 use Drupal\views\ResultRow;
 
@@ -20,6 +21,8 @@ use Drupal\views\ResultRow;
  */
 class Link extends FieldPluginBase {
 
+  use RedirectDestinationTrait;
+
   /**
    * {@inheritdoc}
    */
@@ -27,16 +30,22 @@ class Link extends FieldPluginBase {
     return FALSE;
   }
 
+  /**
+   * {@inheritdoc}
+   */
   protected function defineOptions() {
     $options = parent::defineOptions();
-    $options['text'] = array('default' => '', 'translatable' => TRUE);
+    $options['text'] = array('default' => '');
     return $options;
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     $form['text'] = array(
       '#type' => 'textfield',
-      '#title' => t('Text to display'),
+      '#title' => $this->t('Text to display'),
       '#default_value' => $this->options['text'],
     );
     parent::buildOptionsForm($form, $form_state);
@@ -76,8 +85,8 @@ class Link extends FieldPluginBase {
   protected function renderLink($node, ResultRow $values) {
     if ($node->access('view')) {
       $this->options['alter']['make_link'] = TRUE;
-      $this->options['alter']['path'] = 'node/' . $node->id();
-      $text = !empty($this->options['text']) ? $this->options['text'] : t('View');
+      $this->options['alter']['url'] = $node->urlInfo();
+      $text = !empty($this->options['text']) ? $this->options['text'] : $this->t('View');
       return $text;
     }
   }

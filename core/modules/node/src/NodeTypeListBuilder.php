@@ -14,7 +14,6 @@ use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Routing\UrlGeneratorInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Component\Utility\Xss;
-use Drupal\Component\Utility\String;
 
 /**
  * Defines a class to build a listing of node type entities.
@@ -31,7 +30,7 @@ class NodeTypeListBuilder extends ConfigEntityListBuilder {
   protected $urlGenerator;
 
   /**
-   * Constructs a NodeTypeForm object.
+   * Constructs a NodeTypeListBuilder object.
    *
    * @param \Drupal\Core\Entity\EntityTypeInterface $entity_type
    *   The entity type definition.
@@ -76,7 +75,7 @@ class NodeTypeListBuilder extends ConfigEntityListBuilder {
       'data' => $this->getLabel($entity),
       'class' => array('menu-label'),
     );
-    $row['description'] = Xss::filterAdmin($entity->description);
+    $row['description'] = Xss::filterAdmin($entity->getDescription());
     return $row + parent::buildRow($entity);
   }
 

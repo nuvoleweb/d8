@@ -8,15 +8,17 @@
 namespace Drupal\Core\TypedData;
 
 use Drupal\Component\Plugin\Exception\PluginException;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Cache\CacheBackendInterface;
+use Drupal\Core\DependencyInjection\ClassResolverInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Plugin\DefaultPluginManager;
 use Drupal\Core\TypedData\Validation\MetadataFactory;
 use Drupal\Core\Validation\ConstraintManager;
+use Drupal\Core\Validation\ConstraintValidatorFactory;
 use Drupal\Core\Validation\DrupalTranslator;
-use Symfony\Component\Validator\ValidatorInterface;
 use Symfony\Component\Validator\Validation;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 /**
  * Manages data type plugins.
@@ -44,20 +46,30 @@ class TypedDataManager extends DefaultPluginManager {
    */
   protected $prototypes = array();
 
- /**
-  * Constructs a new TypedDataManager.
-  *
-  * @param \Traversable $namespaces
-  *   An object that implements \Traversable which contains the root paths
-  *   keyed by the corresponding namespace to look for plugin implementations.
-  * @param \Drupal\Core\Cache\CacheBackendInterface $cache_backend
-  *   Cache backend instance to use.
-  * @param \Drupal\Core\Extension\ModuleHandlerInterface $module_handler
-  *   The module handler.
-  */
-  public function __construct(\Traversable $namespaces, CacheBackendInterface $cache_backend, ModuleHandlerInterface $module_handler) {
+  /**
+   * The class resolver.
+   *
+   * @var \Drupal\Core\DependencyInjection\ClassResolverInterface
+   */
+  protected $classResolver;
+
+  /**
+   * Constructs a new TypedDataManager.
+   *
+   * @param \Traversable $namespaces
+   *   An object that implements \Traversable which contains the root paths
+   *   keyed by the corresponding namespace to look for plugin implementations.
+   * @param \Drupal\Core\Cache\CacheBackendInterface $cache_backend
+   *   Cache backend instance to use.
+   * @param \Drupal\Core\Extension\ModuleHandlerInterface $module_handler
+   *   The module handler.
+   * @param \Drupal\Core\DependencyInjection\ClassResolverInterface $class_resolver
+   *   The class resolver.
+   */
+  public function __construct(\Traversable $namespaces, CacheBackendInterface $cache_backend, ModuleHandlerInterface $module_handler, ClassResolverInterface $class_resolver) {
     $this->alterInfo('data_type_info');
     $this->setCacheBackend($cache_backend, 'typed_data_types_plugins');
+    $this->classResolver = $class_resolver;
 
     parent::__construct('Plugin/DataType', $namespaces, $module_handler, NULL, 'Drupal\Core\TypedData\Annotation\DataType');
   }
@@ -69,7 +81,7 @@ class TypedDataManager extends DefaultPluginManager {
    *   The data type, for which a typed object should be instantiated.
    * @param array $configuration
    *   The plugin configuration array, i.e. an array with the following keys:
-   *   - data definition: The data definition object, i.e. an instance of
+   *   - data_definition: The data definition object, i.e. an instance of
    *     \Drupal\Core\TypedData\DataDefinitionInterface.
    *   - name: (optional) If a property or list item is to be created, the name
    *     of the property or the delta of the list item.
@@ -95,7 +107,7 @@ class TypedDataManager extends DefaultPluginManager {
     if (!isset($class)) {
       throw new PluginException(sprintf('The plugin (%s) did not specify an instance class.', $data_type));
     }
-    return new $class($data_definition, $configuration['name'], $configuration['parent']);
+    return $class::createInstance($data_definition, $configuration['name'], $configuration['parent']);
   }
 
   /**
@@ -120,14 +132,14 @@ class TypedDataManager extends DefaultPluginManager {
    *
    * @see \Drupal::typedDataManager()
    * @see \Drupal\Core\TypedData\TypedDataManager::getPropertyInstance()
-   * @see \Drupal\Core\TypedData\Plugin\DataType\Integer
-   * @see \Drupal\Core\TypedData\Plugin\DataType\Float
-   * @see \Drupal\Core\TypedData\Plugin\DataType\String
-   * @see \Drupal\Core\TypedData\Plugin\DataType\Boolean
-   * @see \Drupal\Core\TypedData\Plugin\DataType\Duration
+   * @see \Drupal\Core\TypedData\Plugin\DataType\BinaryData
+   * @see \Drupal\Core\TypedData\Plugin\DataType\BooleanData
    * @see \Drupal\Core\TypedData\Plugin\DataType\Date
+   * @see \Drupal\Core\TypedData\Plugin\DataType\Duration
+   * @see \Drupal\Core\TypedData\Plugin\DataType\FloatData
+   * @see \Drupal\Core\TypedData\Plugin\DataType\IntegerData
+   * @see \Drupal\Core\TypedData\Plugin\DataType\StringData
    * @see \Drupal\Core\TypedData\Plugin\DataType\Uri
-   * @see \Drupal\Core\TypedData\Plugin\DataType\Binary
    */
   public function create(DataDefinitionInterface $definition, $value = NULL, $name = NULL, $parent = NULL) {
     $typed_data = $this->createInstance($definition->getDataType(), array(
@@ -247,26 +259,33 @@ class TypedDataManager extends DefaultPluginManager {
    * @see \Drupal\Core\TypedData\TypedDataManager::create()
    */
   public function getPropertyInstance(TypedDataInterface $object, $property_name, $value = NULL) {
-    $definition = $object->getRoot()->getDataDefinition();
-    // If the definition is a list, we need to look at the data type and the
+    // For performance, try to reuse existing prototypes instead of
+    // constructing new objects when possible. A prototype is reused when
+    // creating a data object:
+    // - for a similar root object (same data type and settings),
+    // - at the same property path under that root object.
+    $root_definition = $object->getRoot()->getDataDefinition();
+    // If the root object is a list, we want to look at the data type and the
     // settings of its item definition.
-    if ($definition instanceof ListDataDefinition) {
-      $definition = $definition->getItemDefinition();
+    if ($root_definition instanceof ListDataDefinition) {
+      $root_definition = $root_definition->getItemDefinition();
     }
-    $key = $definition->getDataType();
-    if ($settings = $definition->getSettings()) {
-      $key .= ':' . implode(',', $settings);
-    }
-    $key .= ':' . $object->getPropertyPath() . '.';
-    // If we are creating list items, we always use 0 in the key as all list
-    // items look the same.
-    $key .= is_numeric($property_name) ? 0 : $property_name;
 
-    // Make sure we have a prototype. Then, clone the prototype and set object
-    // specific values, i.e. the value and the context.
-    if (!isset($this->prototypes[$key]) || !$key) {
-      // Create the initial prototype. For that we need to fetch the definition
-      // of the to be created property instance from the parent.
+    // Root data type and settings.
+    $parts[] = $root_definition->getDataType();
+    if ($settings = $root_definition->getSettings()) {
+      // Hash the settings into a string. crc32 is the fastest way to hash
+      // something for non-cryptographic purposes.
+      $parts[] = crc32(serialize($settings));
+    }
+    // Property path for the requested data object. When creating a list item,
+    // use 0 in the key as all items look the same.
+    $parts[] = $object->getPropertyPath() . '.' . (is_numeric($property_name) ? 0 : $property_name);
+    $key = implode(':', $parts);
+
+    // Create the prototype if needed.
+    if (!isset($this->prototypes[$key])) {
+      // Fetch the data definition for the child object from the parent.
       if ($object instanceof ComplexDataInterface) {
         $definition = $object->getDataDefinition()->getPropertyDefinition($property_name);
       }
@@ -276,17 +295,16 @@ class TypedDataManager extends DefaultPluginManager {
       else {
         throw new \InvalidArgumentException("The passed object has to either implement the ComplexDataInterface or the ListInterface.");
       }
-      // Make sure we have got a valid definition.
       if (!$definition) {
-        throw new \InvalidArgumentException('Property ' . String::checkPlain($property_name) . ' is unknown.');
+        throw new \InvalidArgumentException('Property ' . SafeMarkup::checkPlain($property_name) . ' is unknown.');
       }
-      // Now create the prototype using the definition, but do not pass the
-      // given value as it will serve as prototype for any further instance.
+      // Create the prototype without any value, but with initial parenting
+      // so that constructors can set up the objects correclty.
       $this->prototypes[$key] = $this->create($definition, NULL, $property_name, $object);
     }
 
-    // Clone from the prototype, then update the parent relationship and set the
-    // data value if necessary.
+    // Clone the prototype, update its parenting information, and assign the
+    // value.
     $property = clone $this->prototypes[$key];
     $property->setContext($property_name, $object);
     if (isset($value)) {
@@ -298,7 +316,7 @@ class TypedDataManager extends DefaultPluginManager {
   /**
    * Sets the validator for validating typed data.
    *
-   * @param \Symfony\Component\Validator\ValidatorInterface $validator
+   * @param \Symfony\Component\Validator\Validator\ValidatorInterface $validator
    *   The validator object to set.
    */
   public function setValidator(ValidatorInterface $validator) {
@@ -308,14 +326,16 @@ class TypedDataManager extends DefaultPluginManager {
   /**
    * Gets the validator for validating typed data.
    *
-   * @return \Symfony\Component\Validator\ValidatorInterface
+   * @return \Symfony\Component\Validator\Validator\ValidatorInterface
    *   The validator object.
    */
   public function getValidator() {
     if (!isset($this->validator)) {
       $this->validator = Validation::createValidatorBuilder()
-        ->setMetadataFactory(new MetadataFactory())
+        ->setMetadataFactory(new MetadataFactory($this))
         ->setTranslator(new DrupalTranslator())
+        ->setConstraintValidatorFactory(new ConstraintValidatorFactory($this->classResolver))
+        ->setApiVersion(Validation::API_VERSION_2_4)
         ->getValidator();
     }
     return $this->validator;
@@ -377,12 +397,8 @@ class TypedDataManager extends DefaultPluginManager {
       $constraints['NotNull'] = array();
     }
     // Check if the class provides allowed values.
-    if (is_subclass_of($definition->getClass(),'Drupal\Core\TypedData\AllowedValuesInterface')) {
+    if (is_subclass_of($definition->getClass(),'Drupal\Core\TypedData\OptionsProviderInterface')) {
       $constraints['AllowedValues'] = array();
-    }
-    // Add any constraints about referenced data.
-    if ($definition instanceof DataReferenceDefinitionInterface) {
-      $constraints += $definition->getTargetDefinition()->getConstraints();
     }
     return $constraints;
   }
@@ -393,6 +409,46 @@ class TypedDataManager extends DefaultPluginManager {
   public function clearCachedDefinitions() {
     parent::clearCachedDefinitions();
     $this->prototypes = array();
+  }
+
+  /**
+   * Gets the canonical representation of a TypedData object.
+   *
+   * The canonical representation is typically used when data is passed on to
+   * other code components. In many use cases, the TypedData object is mostly
+   * unified adapter wrapping a primary value (e.g. a string, an entity...)
+   * which is the canonical representation that consuming code like constraint
+   * validators are really interested in. For some APIs, though, the domain
+   * object (e.g. Field API's FieldItem and FieldItemList) directly implements
+   * TypedDataInterface, and the canonical representation is thus the data
+   * object itself.
+   *
+   * When a TypedData object gets validated, for example, its canonical
+   * representation is passed on to constraint validators, which thus receive
+   * an Entity unwrapped, but a FieldItem as is.
+   *
+   * Data types specify whether their data objects need unwrapping by using the
+   * 'unwrap_for_canonical_representation' property in the data definition
+   * (defaults to TRUE).
+   *
+   * @param \Drupal\Core\TypedData\TypedDataInterface $data
+   *   The data.
+   *
+   * @return mixed
+   *   The canonical representation of the passed data.
+   */
+  public function getCanonicalRepresentation(TypedDataInterface $data) {
+    $data_definition = $data->getDataDefinition();
+    // In case a list is passed, respect the 'wrapped' key of its data type.
+    if ($data_definition instanceof ListDataDefinitionInterface) {
+      $data_definition = $data_definition->getItemDefinition();
+    }
+    // Get the plugin definition of the used data type.
+    $type_definition = $this->getDefinition($data_definition->getDataType());
+    if (!empty($type_definition['unwrap_for_canonical_representation'])) {
+      return $data->getValue();
+    }
+    return $data;
   }
 
 }

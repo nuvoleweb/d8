@@ -9,7 +9,9 @@
 
 namespace Drupal\search;
 
+use Drupal\Component\Utility\Unicode;
 use Drupal\Core\Database\Query\SelectExtender;
+use Drupal\Core\Database\Query\SelectInterface;
 use Drupal\Core\Database\StatementEmpty;
 
 /**
@@ -235,7 +237,7 @@ class SearchQuery extends SelectExtender {
     }
 
     // Classify tokens.
-    $or = FALSE;
+    $in_or = FALSE;
     $limit_combinations = \Drupal::config('search.settings')->get('and_or_limit');
     // The first search expression does not count as AND.
     $and_count = -1;
@@ -248,13 +250,14 @@ class SearchQuery extends SelectExtender {
         break;
       }
 
-      $phrase = FALSE;
       // Strip off phrase quotes.
+      $phrase = FALSE;
       if ($match[2]{0} == '"') {
         $match[2] = substr($match[2], 1, -1);
         $phrase = TRUE;
         $this->simple = FALSE;
       }
+
       // Simplify keyword according to indexing rules and external
       // preprocessors. Use same process as during search indexing, so it
       // will match search index.
@@ -275,7 +278,7 @@ class SearchQuery extends SelectExtender {
           $last = array($last);
         }
         $this->keys['positive'][] = $last;
-        $or = TRUE;
+        $in_or = TRUE;
         $or_count++;
         continue;
       }
@@ -290,7 +293,7 @@ class SearchQuery extends SelectExtender {
           // Lower-case "or" instead of "OR" is a warning condition.
           $this->status |= SearchQuery::LOWER_CASE_OR;
         }
-        if ($or) {
+        if ($in_or) {
           // Add to last element (which is an array).
           $this->keys['positive'][count($this->keys['positive']) - 1] = array_merge($this->keys['positive'][count($this->keys['positive']) - 1], $words);
         }
@@ -299,33 +302,38 @@ class SearchQuery extends SelectExtender {
           $and_count++;
         }
       }
-      $or = FALSE;
+      $in_or = FALSE;
     }
 
     // Convert keywords into SQL statements.
-    $simple_and = FALSE;
-    $simple_or = FALSE;
+    $has_and = FALSE;
+    $has_or = FALSE;
     // Positive matches.
     foreach ($this->keys['positive'] as $key) {
       // Group of ORed terms.
       if (is_array($key) && count($key)) {
-        $simple_or = TRUE;
-        $any = FALSE;
+        // If we had already found one OR, this is another one AND-ed with the
+        // first, meaning it is not a simple query.
+        if ($has_or) {
+          $this->simple = FALSE;
+        }
+        $has_or = TRUE;
+        $has_new_scores = FALSE;
         $queryor = db_or();
         foreach ($key as $or) {
           list($num_new_scores) = $this->parseWord($or);
-          $any |= $num_new_scores;
+          $has_new_scores |= $num_new_scores;
           $queryor->condition('d.data', "% $or %", 'LIKE');
         }
         if (count($queryor)) {
           $this->conditions->condition($queryor);
           // A group of OR keywords only needs to match once.
-          $this->matches += ($any > 0);
+          $this->matches += ($has_new_scores > 0);
         }
       }
       // Single ANDed term.
       else {
-        $simple_and = TRUE;
+        $has_and = TRUE;
         list($num_new_scores, $num_valid_words) = $this->parseWord($key);
         $this->conditions->condition('d.data', "% $key %", 'LIKE');
         if (!$num_valid_words) {
@@ -335,9 +343,10 @@ class SearchQuery extends SelectExtender {
         $this->matches += $num_new_scores;
       }
     }
-    if ($simple_and && $simple_or) {
+    if ($has_and && $has_or) {
       $this->simple = FALSE;
     }
+
     // Negative matches.
     foreach ($this->keys['negative'] as $key) {
       $this->conditions->condition('d.data', "% $key %", 'NOT LIKE');
@@ -360,7 +369,7 @@ class SearchQuery extends SelectExtender {
     $split = explode(' ', $word);
     foreach ($split as $s) {
       $num = is_numeric($s);
-      if ($num || drupal_strlen($s) >= \Drupal::config('search.settings')->get('index.minimum_word_size')) {
+      if ($num || Unicode::strlen($s) >= \Drupal::config('search.settings')->get('index.minimum_word_size')) {
         if (!isset($this->words[$s])) {
           $this->words[$s] = $s;
           $num_new_scores++;
@@ -409,8 +418,15 @@ class SearchQuery extends SelectExtender {
     $this
       ->condition('i.type', $this->type)
       ->groupBy('i.type')
-      ->groupBy('i.sid')
-      ->having('COUNT(*) >= :matches', array(':matches' => $this->matches));
+      ->groupBy('i.sid');
+
+    // If the query is simple, we should have calculated the number of
+    // matching words we need to find, so impose that criterion. For non-
+    // simple queries, this condition could lead to incorrectly deciding not
+    // to continue with the full query.
+    if ($this->simple) {
+      $this->having('COUNT(*) >= :matches', array(':matches' => $this->matches));
+    }
 
     // Clone the query object to calculate normalization.
     $normalize_query = clone $this->query;
@@ -448,6 +464,21 @@ class SearchQuery extends SelectExtender {
   }
 
   /**
+   * {@inhertidoc}
+   */
+  public function preExecute(SelectInterface $query = NULL) {
+    if (!$this->executedPrepare) {
+      $this->prepareAndNormalize();
+    }
+
+    if (!$this->normalize) {
+      return FALSE;
+    }
+
+    return parent::preExecute($query);
+  }
+
+  /**
    * Adds a custom score expression to the search query.
    *
    * Score expressions are used to order search results. If no calls to
@@ -455,10 +486,10 @@ class SearchQuery extends SelectExtender {
    * used. However, if at least one call to addScore() has taken place, the
    * keyword relevance score is not automatically added.
    *
-   * Also note that if you call orderBy() directly on the query, search scores
-   * will not automatically be used to order search results. Your orderBy()
-   * expression can reference 'calculated_score', which will be the total
-   * calculated score value.
+   * Note that you must use this method to add ordering to your searches, and
+   * not call orderBy() directly, when using the SearchQuery extender. This is
+   * because of the two-pass system the SearchQuery class uses to normalize
+   * scores.
    *
    * @param string $score
    *   The score expression, which should evaluate to a number between 0 and 1.
@@ -477,8 +508,12 @@ class SearchQuery extends SelectExtender {
     if ($multiply) {
       $i = count($this->multiply);
       // Modify the score expression so it is multiplied by the multiplier,
-      // with a divisor to renormalize.
-      $score = "(CAST (:multiply_$i AS DECIMAL(10,4))) * COALESCE(($score), 0) / (CAST (:total_$i AS DECIMAL(10,4)))";
+      // with a divisor to renormalize. Note that the ROUND here is necessary
+      // for PostgreSQL and SQLite in order to ensure that the :multiply_* and
+      // :total_* arguments are treated as a numeric type, because the
+      // PostgreSQL PDO driver sometimes puts values in as strings instead of
+      // numbers in complex expressions like this.
+      $score = "(ROUND(:multiply_$i, 4)) * COALESCE(($score), 0) / (ROUND(:total_$i, 4))";
       // Add an argument for the multiplier. The :total_$i argument is taken
       // care of in the execute() method, which is when the total divisor is
       // calculated.
@@ -493,7 +528,7 @@ class SearchQuery extends SelectExtender {
     // in the execute() method we can add arguments.
     while (($pos = strpos($score, 'i.relevance')) !== FALSE) {
       $pieces = explode('i.relevance', $score, 2);
-      $score = implode('((CAST (:normalization_' . $this->relevance_count . ' AS DECIMAL(10,4))) * i.score * t.count)', $pieces);
+      $score = implode('((ROUND(:normalization_' . $this->relevance_count . ', 4)) * i.score * t.count)', $pieces);
       $this->relevance_count++;
     }
 
@@ -506,9 +541,8 @@ class SearchQuery extends SelectExtender {
   /**
    * Executes the search.
    *
-   * If not already done, this calls prepareAndNormalize() first. Then the
-   * complex conditions are applied to the query including score expressions
-   * and ordering.
+   * The complex conditions are applied to the query including score
+   * expressions and ordering.
    *
    * Error and warning conditions can apply. Call getStatus() after calling
    * this method to retrieve them.
@@ -517,14 +551,8 @@ class SearchQuery extends SelectExtender {
    *   A query result set containing the results of the query.
    */
   public function execute() {
-
-    if (!$this->executedPrepare) {
-      $this->prepareAndNormalize();
-    }
-
-    if (!$this->normalize) {
-      // There were no keyword matches, so return an empty result set.
-      return new StatementEmpty();
+    if (!$this->preExecute($this)) {
+      return NULL;
     }
 
     // Add conditions to the query.

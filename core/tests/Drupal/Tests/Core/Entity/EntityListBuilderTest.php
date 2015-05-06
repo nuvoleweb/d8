@@ -86,7 +86,7 @@ class EntityListBuilderTest extends UnitTestCase {
   }
 
   /**
-   * @covers \Drupal\Core\Entity\EntityListBuilder::getOperations
+   * @covers ::getOperations
    */
   public function testGetOperations() {
     $operation_name = $this->randomMachineName();
@@ -139,7 +139,7 @@ class EntityListBuilderTest extends UnitTestCase {
 
   /**
    * Tests that buildRow() returns a string which has been run through
-   * String::checkPlain().
+   * SafeMarkup::checkPlain().
    *
    * @dataProvider providerTestBuildRow
    *
@@ -173,11 +173,11 @@ class EntityListBuilderTest extends UnitTestCase {
    * Data provider for testBuildRow().
    *
    * @see self::testBuildRow()
-   * @see \Drupal\Tests\Component\Utility\StringTest::providerCheckPlain()
+   * @see \Drupal\Tests\Component\Utility\SafeMarkupTest::providerCheckPlain()
    *
    * @return array
    *   An array containing a string, the expected return from
-   *   String::checkPlain, a message to be output for failures, and whether the
+   *   SafeMarkup::checkPlain, a message to be output for failures, and whether the
    *   test should be processed as multibyte.
    */
   public function providerTestBuildRow() {

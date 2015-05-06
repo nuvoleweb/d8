@@ -7,7 +7,7 @@
 
 namespace Drupal\Tests\Core\Path;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Path\PathMatcher;
 use Drupal\Tests\UnitTestCase;
 
@@ -37,7 +37,8 @@ class PathMatcherTest extends UnitTestCase {
         ),
       )
     );
-    $this->pathMatcher = new PathMatcher($config_factory_stub);
+    $route_match = $this->getMock('Drupal\Core\Routing\RouteMatchInterface');
+    $this->pathMatcher = new PathMatcher($config_factory_stub, $route_match);
   }
 
   /**
@@ -48,7 +49,7 @@ class PathMatcherTest extends UnitTestCase {
   public function testMatchPath($patterns, $paths) {
     foreach ($paths as $path => $expected_result) {
       $actual_result = $this->pathMatcher->matchPath($path, $patterns);
-      $this->assertEquals($actual_result, $expected_result, String::format('Tried matching the path <code>@path</code> to the pattern <pre>@patterns</pre> - expected @expected, got @actual.', array(
+      $this->assertEquals($actual_result, $expected_result, SafeMarkup::format('Tried matching the path <code>@path</code> to the pattern <pre>@patterns</pre> - expected @expected, got @actual.', array(
         '@path' => $path,
         '@patterns' => $patterns,
         '@expected' => var_export($expected_result, TRUE),

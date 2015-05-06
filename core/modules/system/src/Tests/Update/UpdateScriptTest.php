@@ -7,6 +7,7 @@
 
 namespace Drupal\system\Tests\Update;
 
+use Drupal\Core\Url;
 use Drupal\simpletest\WebTestBase;
 
 /**
@@ -23,15 +24,30 @@ class UpdateScriptTest extends WebTestBase {
    */
   public static $modules = array('update_script_test', 'dblog');
 
+  /**
+   * {@inheritdoc}
+   */
   protected $dumpHeaders = TRUE;
 
-  private $update_url;
-  private $update_user;
+  /**
+   * URL to the update.php script.
+   *
+   * @var string
+   */
+  private $updateUrl;
+
+  /**
+   * A user with the necessary permissions to administer software updates.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  private $updateUser;
 
   protected function setUp() {
     parent::setUp();
-    $this->update_url = $GLOBALS['base_url'] . '/update.php';
-    $this->update_user = $this->drupalCreateUser(array('administer software updates', 'access site in maintenance mode'));
+    $this->updateUrl = Url::fromRoute('system.db_update');
+    $this->updateUser = $this->drupalCreateUser(array('administer software updates', 'access site in maintenance mode'));
+    \Drupal::service('entity.definition_update_manager')->applyUpdates();
   }
 
   /**
@@ -41,22 +57,22 @@ class UpdateScriptTest extends WebTestBase {
     // Try accessing update.php without the proper permission.
     $regular_user = $this->drupalCreateUser();
     $this->drupalLogin($regular_user);
-    $this->drupalGet($this->update_url, array('external' => TRUE));
+    $this->drupalGet($this->updateUrl, array('external' => TRUE));
     $this->assertResponse(403);
 
     // Try accessing update.php as an anonymous user.
     $this->drupalLogout();
-    $this->drupalGet($this->update_url, array('external' => TRUE));
+    $this->drupalGet($this->updateUrl, array('external' => TRUE));
     $this->assertResponse(403);
 
     // Access the update page with the proper permission.
-    $this->drupalLogin($this->update_user);
-    $this->drupalGet($this->update_url, array('external' => TRUE));
+    $this->drupalLogin($this->updateUser);
+    $this->drupalGet($this->updateUrl, array('external' => TRUE));
     $this->assertResponse(200);
 
     // Access the update page as user 1.
-    $this->drupalLogin($this->root_user);
-    $this->drupalGet($this->update_url, array('external' => TRUE));
+    $this->drupalLogin($this->rootUser);
+    $this->drupalGet($this->updateUrl, array('external' => TRUE));
     $this->assertResponse(200);
   }
 
@@ -64,12 +80,12 @@ class UpdateScriptTest extends WebTestBase {
    * Tests that requirements warnings and errors are correctly displayed.
    */
   function testRequirements() {
-    $update_script_test_config = \Drupal::config('update_script_test.settings');
-    $this->drupalLogin($this->update_user);
+    $update_script_test_config = $this->config('update_script_test.settings');
+    $this->drupalLogin($this->updateUser);
 
     // If there are no requirements warnings or errors, we expect to be able to
     // go through the update process uninterrupted.
-    $this->drupalGet($this->update_url, array('external' => TRUE));
+    $this->drupalGet($this->updateUrl, array('external' => TRUE));
     $this->clickLink(t('Continue'));
     $this->assertText(t('No pending updates.'), 'End of update process was reached.');
     // Confirm that all caches were cleared.
@@ -83,7 +99,7 @@ class UpdateScriptTest extends WebTestBase {
     // successfully.
     $update_script_test_config->set('requirement_type', REQUIREMENT_WARNING)->save();
     drupal_set_installed_schema_version('update_script_test', drupal_get_installed_schema_version('update_script_test') - 1);
-    $this->drupalGet($this->update_url, array('external' => TRUE));
+    $this->drupalGet($this->updateUrl, array('external' => TRUE));
     $this->assertText('This is a requirements warning provided by the update_script_test module.');
     $this->clickLink('try again');
     $this->assertNoText('This is a requirements warning provided by the update_script_test module.');
@@ -94,7 +110,7 @@ class UpdateScriptTest extends WebTestBase {
     $this->assertText(t('hook_cache_flush() invoked for update_script_test.module.'), 'Caches were cleared after resolving a requirements warning and applying updates.');
 
     // Now try again without pending updates to make sure that works too.
-    $this->drupalGet($this->update_url, array('external' => TRUE));
+    $this->drupalGet($this->updateUrl, array('external' => TRUE));
     $this->assertText('This is a requirements warning provided by the update_script_test module.');
     $this->clickLink('try again');
     $this->assertNoText('This is a requirements warning provided by the update_script_test module.');
@@ -107,7 +123,7 @@ class UpdateScriptTest extends WebTestBase {
     // clicking the link to proceed (since the problem that triggered the error
     // has not been fixed).
     $update_script_test_config->set('requirement_type', REQUIREMENT_ERROR)->save();
-    $this->drupalGet($this->update_url, array('external' => TRUE));
+    $this->drupalGet($this->updateUrl, array('external' => TRUE));
     $this->assertText('This is a requirements error provided by the update_script_test module.');
     $this->clickLink('try again');
     $this->assertText('This is a requirements error provided by the update_script_test module.');
@@ -120,10 +136,10 @@ class UpdateScriptTest extends WebTestBase {
     // Since visiting update.php triggers a rebuild of the theme system from an
     // unusual maintenance mode environment, we check that this rebuild did not
     // put any incorrect information about the themes into the database.
-    $original_theme_data = \Drupal::config('core.extension')->get('theme');
-    $this->drupalLogin($this->update_user);
-    $this->drupalGet($this->update_url, array('external' => TRUE));
-    $final_theme_data = \Drupal::config('core.extension')->get('theme');
+    $original_theme_data = $this->config('core.extension')->get('theme');
+    $this->drupalLogin($this->updateUser);
+    $this->drupalGet($this->updateUrl, ['external' => TRUE]);
+    $final_theme_data = $this->config('core.extension')->get('theme');
     $this->assertEqual($original_theme_data, $final_theme_data, 'Visiting update.php does not alter the information about themes stored in the database.');
   }
 
@@ -132,8 +148,8 @@ class UpdateScriptTest extends WebTestBase {
    */
   function testNoUpdateFunctionality() {
     // Click through update.php with 'administer software updates' permission.
-    $this->drupalLogin($this->update_user);
-    $this->drupalGet($this->update_url, array('external' => TRUE));
+    $this->drupalLogin($this->updateUser);
+    $this->drupalGet($this->updateUrl, array('external' => TRUE));
     $this->clickLink(t('Continue'));
     $this->assertText(t('No pending updates.'));
     $this->assertNoLink('Administration pages');
@@ -144,7 +160,7 @@ class UpdateScriptTest extends WebTestBase {
     // Click through update.php with 'access administration pages' permission.
     $admin_user = $this->drupalCreateUser(array('administer software updates', 'access administration pages'));
     $this->drupalLogin($admin_user);
-    $this->drupalGet($this->update_url, array('external' => TRUE));
+    $this->drupalGet($this->updateUrl, array('external' => TRUE));
     $this->clickLink(t('Continue'));
     $this->assertText(t('No pending updates.'));
     $this->assertLink('Administration pages');
@@ -166,8 +182,8 @@ class UpdateScriptTest extends WebTestBase {
     $this->assertEqual($schema_version, 8000, 'update_script_test schema version overridden to 8000.');
 
     // Click through update.php with 'administer software updates' permission.
-    $this->drupalLogin($this->update_user);
-    $this->drupalGet($this->update_url, array('external' => TRUE));
+    $this->drupalLogin($this->updateUser);
+    $this->drupalGet($this->updateUrl, array('external' => TRUE));
     $this->clickLink(t('Continue'));
     $this->clickLink(t('Apply pending updates'));
 
@@ -202,7 +218,7 @@ class UpdateScriptTest extends WebTestBase {
     // 'access site reports' permissions.
     $admin_user = $this->drupalCreateUser(array('administer software updates', 'access administration pages', 'access site reports', 'access site in maintenance mode'));
     $this->drupalLogin($admin_user);
-    $this->drupalGet($this->update_url, array('external' => TRUE));
+    $this->drupalGet($this->updateUrl, array('external' => TRUE));
     $this->clickLink(t('Continue'));
     $this->clickLink(t('Apply pending updates'));
     $this->assertText('Updates were attempted.');

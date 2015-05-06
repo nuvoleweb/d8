@@ -44,7 +44,7 @@ class RequestHandler implements ContainerAwareInterface {
       ->get('plugin.manager.rest')
       ->getInstance(array('id' => $plugin));
 
-    // Deserialze incoming data if available.
+    // Deserialize incoming data if available.
     $serializer = $this->container->get('serializer');
     $received = $request->getContent();
     $unserialized = NULL;
@@ -76,7 +76,7 @@ class RequestHandler implements ContainerAwareInterface {
 
     // Determine the request parameters that should be passed to the resource
     // plugin.
-    $route_parameters = $request->attributes->get('_route_params');
+    $route_parameters = $route_match->getParameters();
     $parameters = array();
     // Filter out all internal parameters starting with "_".
     foreach ($route_parameters as $key => $parameter) {
@@ -108,6 +108,8 @@ class RequestHandler implements ContainerAwareInterface {
       $output = $serializer->serialize($data, $format);
       $response->setContent($output);
       $response->headers->set('Content-Type', $request->getMimeType($format));
+      // Add rest settings config's cache tags.
+      $response->addCacheableDependency($this->container->get('config.factory')->get('rest.settings'));
     }
     return $response;
   }

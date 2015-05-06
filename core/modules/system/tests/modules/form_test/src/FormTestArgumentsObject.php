@@ -7,14 +7,14 @@
 
 namespace Drupal\form_test;
 
-use Drupal\Component\Utility\String;
-use Drupal\Core\Form\FormBase;
+use Drupal\Component\Utility\SafeMarkup;
+use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
 
 /**
  * Provides a test form object that needs arguments.
  */
-class FormTestArgumentsObject extends FormBase {
+class FormTestArgumentsObject extends ConfigFormBase {
 
   /**
    * {@inheritdoc}
@@ -26,12 +26,19 @@ class FormTestArgumentsObject extends FormBase {
   /**
    * {@inheritdoc}
    */
+  protected function getEditableConfigNames() {
+    return ['form_test.object'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function buildForm(array $form, FormStateInterface $form_state, $arg = NULL) {
     $form['element'] = array('#markup' => 'The FormTestArgumentsObject::buildForm() method was used for this form.');
 
     $form['bananas'] = array(
       '#type' => 'textfield',
-      '#default_value' => String::checkPlain($arg),
+      '#default_value' => SafeMarkup::checkPlain($arg),
       '#title' => $this->t('Bananas'),
     );
 

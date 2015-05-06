@@ -38,7 +38,7 @@ class Unicode {
    *
    * @see http://unicode.org/glossary
    */
-  const PREG_CLASS_WORD_BOUNDARY = <<< 'EOD'
+  const PREG_CLASS_WORD_BOUNDARY = <<<'EOD'
 \x{0}-\x{2F}\x{3A}-\x{40}\x{5B}-\x{60}\x{7B}-\x{A9}\x{AB}-\x{B1}\x{B4}
 \x{B6}-\x{B8}\x{BB}\x{BF}\x{D7}\x{F7}\x{2C2}-\x{2C5}\x{2D2}-\x{2DF}
 \x{2E5}-\x{2EB}\x{2ED}\x{2EF}-\x{2FF}\x{375}\x{37E}-\x{385}\x{387}\x{3F6}
@@ -539,6 +539,22 @@ EOD;
     }
 
     return $string;
+  }
+
+  /**
+   * Compares UTF-8-encoded strings in a binary safe case-insensitive manner.
+   *
+   * @param string $str1
+   *   The first string.
+   * @param string $str2
+   *   The second string.
+   *
+   * @return int
+   *   Returns < 0 if $str1 is less than $str2; > 0 if $str1 is greater than
+   *   $str2, and 0 if they are equal.
+   */
+  public static function strcasecmp($str1 , $str2) {
+    return strcmp(static::strtoupper($str1), static::strtoupper($str2));
   }
 
   /**

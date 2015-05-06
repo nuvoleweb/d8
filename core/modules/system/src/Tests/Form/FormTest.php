@@ -8,11 +8,12 @@
 namespace Drupal\system\Tests\Form;
 
 use Drupal\Component\Serialization\Json;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Form\FormState;
 use Drupal\Core\Render\Element;
 use Drupal\form_test\Form\FormTestDisabledElementsForm;
 use Drupal\simpletest\WebTestBase;
+use Drupal\user\RoleInterface;
 
 /**
  * Tests various form element validation mechanisms.
@@ -38,7 +39,7 @@ class FormTest extends WebTestBase {
     $filtered_html_format->save();
 
     $filtered_html_permission = $filtered_html_format->getPermissionName();
-    user_role_grant_permissions(DRUPAL_ANONYMOUS_RID, array($filtered_html_permission));
+    user_role_grant_permissions(RoleInterface::ANONYMOUS_ID, array($filtered_html_permission));
   }
 
   /**
@@ -117,7 +118,7 @@ class FormTest extends WebTestBase {
           // so we bypass it by setting the token to FALSE.
           $form['#token'] = FALSE;
           \Drupal::formBuilder()->prepareForm($form_id, $form, $form_state);
-          drupal_process_form($form_id, $form, $form_state);
+          \Drupal::formBuilder()->processForm($form_id, $form, $form_state);
           $errors = $form_state->getErrors();
           // Form elements of type 'radios' throw all sorts of PHP notices
           // when you try to render them like this, so we ignore those for
@@ -338,7 +339,7 @@ class FormTest extends WebTestBase {
       'multiple_no_default_required[]' => 'three',
     );
     $this->drupalPostForm(NULL, $edit, 'Submit');
-    $values = Json::decode($this->drupalGetContent());
+    $values = Json::decode($this->getRawContent());
 
     // Verify expected values.
     $expected = array(
@@ -533,7 +534,7 @@ class FormTest extends WebTestBase {
     // the disabled container.
     $actual_count = count($disabled_elements);
     $expected_count = 41;
-    $this->assertEqual($actual_count, $expected_count, String::format('Found @actual elements with disabled property (expected @expected).', array(
+    $this->assertEqual($actual_count, $expected_count, SafeMarkup::format('Found @actual elements with disabled property (expected @expected).', array(
       '@actual' => count($disabled_elements),
       '@expected' => $expected_count,
     )));
@@ -615,7 +616,7 @@ class FormTest extends WebTestBase {
       $path = strtr($path, array('!type' => $type));
       // Verify that the element exists.
       $element = $this->xpath($path, array(
-        ':name' => String::checkPlain($name),
+        ':name' => SafeMarkup::checkPlain($name),
         ':div-class' => $class,
         ':value' => isset($item['#value']) ? $item['#value'] : '',
       ));
@@ -671,12 +672,4 @@ class FormTest extends WebTestBase {
     $this->assertTrue(!empty($element), 'The textarea has the proper required attribute.');
   }
 
-  /**
-   * Tests a form with a form state storing a database connection.
-   */
-  public function testFormStateDatabaseConnection() {
-    $this->assertNoText('Database connection found');
-    $this->drupalPostForm('form-test/form_state-database', array(), t('Submit'));
-    $this->assertText('Database connection found');
-  }
 }

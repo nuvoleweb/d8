@@ -9,7 +9,8 @@
     attach: function (context) {
       var $context = $(context);
       var options = drupalSettings.contentTranslationDependentOptions;
-      var $fields, dependent_columns;
+      var $fields;
+      var dependent_columns;
 
       function fieldsChangeHandler($fields, dependent_columns) {
         return function (e) {
@@ -70,7 +71,7 @@
     attach: function (context) {
       // Initially hide all field rows for non translatable bundles and all column
       // rows for non translatable fields.
-      $(context).find('table .bundle-settings .translatable :input').once('translation-entity-admin-hide', function () {
+      $(context).find('table .bundle-settings .translatable :input').once('translation-entity-admin-hide').each(function () {
         var $input = $(this);
         var $bundleSettings = $input.closest('.bundle-settings');
         if (!$input.is(':checked')) {
@@ -81,16 +82,16 @@
         }
       });
 
-      // When a bundle is made translatable all of its field instances should
-      // inherit this setting. Instead when it is made non translatable its field
-      // instances are hidden, since their translatability no longer matters.
+      // When a bundle is made translatable all of its fields should inherit
+      // this setting. Instead when it is made non translatable its fields are
+      // hidden, since their translatability no longer matters.
       $('body').once('translation-entity-admin-bind').on('click', 'table .bundle-settings .translatable :input', function (e) {
         var $target = $(e.target);
         var $bundleSettings = $target.closest('.bundle-settings');
         var $settings = $bundleSettings.nextUntil('.bundle-settings');
         var $fieldSettings = $settings.filter('.field-settings');
         if ($target.is(':checked')) {
-          $bundleSettings.find('.operations :input[name$="[language_show]"]').prop('checked', true);
+          $bundleSettings.find('.operations :input[name$="[language_alterable]"]').prop('checked', true);
           $fieldSettings.find('.translatable :input').prop('checked', true);
           $settings.show();
         }

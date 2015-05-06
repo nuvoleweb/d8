@@ -7,12 +7,15 @@
 
 namespace Drupal\migrate_drupal\Tests\d6;
 
-use Drupal\migrate_drupal\Tests\MigrateDrupalTestBase;
+use Drupal\Core\Field\FieldStorageDefinitionInterface;
+use Drupal\entity_reference\Tests\EntityReferenceTestTrait;
 
 /**
  * Base class for Taxonomy/Node migration tests.
  */
-abstract class MigrateTermNodeTestBase extends MigrateDrupalTestBase {
+abstract class MigrateTermNodeTestBase extends MigrateDrupal6TestBase {
+
+  use EntityReferenceTestTrait;
 
   /**
    * {@inheritdoc}
@@ -31,26 +34,13 @@ abstract class MigrateTermNodeTestBase extends MigrateDrupalTestBase {
     $node_type = entity_create('node_type', array('type' => 'story'));
     $node_type->save();
     foreach (array('vocabulary_1_i_0_', 'vocabulary_2_i_1_', 'vocabulary_3_i_2_') as $name) {
-      entity_create('field_storage_config', array(
-        'name' => $name,
-        'entity_type' => 'node',
-        'type' => 'taxonomy_term_reference',
-        'cardinality' => -1,
-        'settings' => array(
-          'allowed_values' => array(
-            array(
-              'vocabulary' => $vocabulary->id(),
-              'parent' => '0',
-            ),
-          ),
+      $handler_settings = array(
+        'target_bundles' => array(
+          $vocabulary->id() => $vocabulary->id(),
         ),
-      ))->save();
-      entity_create('field_instance_config', array(
-        'field_name' => $name,
-        'entity_type' => 'node',
-        'bundle' => 'story',
-      ))->save();
-
+        'auto_create' => TRUE,
+      );
+      $this->createEntityReferenceField('node', 'story', $name, NULL, 'taxonomy_term', 'default', $handler_settings, FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED);
     }
     $id_mappings = array(
       'd6_vocabulary_field_instance' => array(
@@ -87,10 +77,15 @@ abstract class MigrateTermNodeTestBase extends MigrateDrupalTestBase {
       }
     }
     $dumps = array(
-      $this->getDumpDirectory() . '/Drupal6Node.php',
-      $this->getDumpDirectory() . '/Drupal6TermNode.php',
-      $this->getDumpDirectory() . '/Drupal6TaxonomyTerm.php',
-      $this->getDumpDirectory() . '/Drupal6TaxonomyVocabulary.php',
+      $this->getDumpDirectory() . '/Node.php',
+      $this->getDumpDirectory() . '/NodeRevisions.php',
+      $this->getDumpDirectory() . '/ContentTypeStory.php',
+      $this->getDumpDirectory() . '/ContentTypeTestPlanet.php',
+      $this->getDumpDirectory() . '/TermNode.php',
+      $this->getDumpDirectory() . '/TermHierarchy.php',
+      $this->getDumpDirectory() . '/TermData.php',
+      $this->getDumpDirectory() . '/Vocabulary.php',
+      $this->getDumpDirectory() . '/VocabularyNodeTypes.php',
     );
     $this->loadDumps($dumps);
   }

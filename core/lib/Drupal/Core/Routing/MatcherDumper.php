@@ -114,17 +114,18 @@ class MatcherDumper implements MatcherDumperInterface {
         foreach ($routes as $name => $route) {
           /** @var \Symfony\Component\Routing\Route $route */
           $route->setOption('compiler_class', '\Drupal\Core\Routing\RouteCompiler');
+          /** @var \Drupal\Core\Routing\CompiledRoute $compiled */
           $compiled = $route->compile();
           // The fit value is a binary number which has 1 at every fixed path
           // position and 0 where there is a wildcard. We keep track of all such
-          // patterns that exist so that we can minimize the the number of path
+          // patterns that exist so that we can minimize the number of path
           // patterns we need to check in the RouteProvider.
           $masks[$compiled->getFit()] = 1;
           $names[] = $name;
           $values = array(
             'name' => $name,
             'fit' => $compiled->getFit(),
-            'path' => $compiled->getPath(),
+            'path' => $route->getPath(),
             'pattern_outline' => $compiled->getPatternOutline(),
             'number_parts' => $compiled->getNumParts(),
             'route' => serialize($route),

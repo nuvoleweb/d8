@@ -56,9 +56,8 @@ class WizardPluginBaseUnitTest extends ViewUnitTestBase {
     $random_description = $this->randomMachineName();
 
     // Add a new language and mark it as default.
-    $language = ConfigurableLanguage::createFromLangcode('it');
-    $language->set('default', TRUE);
-    $language->save();
+    ConfigurableLanguage::createFromLangcode('it')->save();
+    $this->config('system.site')->set('default_langcode', 'it')->save();
 
     $form_state->setValues([
       'id' => $random_id,

@@ -60,9 +60,16 @@ class CustomPageExceptionHtmlSubscriberTest extends UnitTestCase {
   /**
    * The tested custom page exception subscriber.
    *
-   * @var \Drupal\Core\EventSubscriber\CustomPageExceptionHtmlSubscriber
+   * @var \Drupal\Core\EventSubscriber\CustomPageExceptionHtmlSubscriber|\Drupal\Tests\Core\EventSubscriber\TestCustomPageExceptionHtmlSubscriber
    */
   protected $customPageSubscriber;
+
+  /**
+   * The mocked redirect.destination service.
+   *
+   * @var \Drupal\Core\Routing\RedirectDestinationInterface|\PHPUnit_Framework_MockObject_MockObject
+   */
+  protected $redirectDestination;
 
   /**
    * {@inheritdoc}
@@ -73,7 +80,13 @@ class CustomPageExceptionHtmlSubscriberTest extends UnitTestCase {
     $this->aliasManager = $this->getMock('Drupal\Core\Path\AliasManagerInterface');
     $this->kernel = $this->getMock('Symfony\Component\HttpKernel\HttpKernelInterface');
     $this->logger = $this->getMock('Psr\Log\LoggerInterface');
-    $this->customPageSubscriber = new CustomPageExceptionHtmlSubscriber($this->configFactory, $this->aliasManager, $this->kernel, $this->logger);
+    $this->redirectDestination = $this->getMock('\Drupal\Core\Routing\RedirectDestinationInterface');
+
+    $this->redirectDestination->expects($this->any())
+      ->method('getAsArray')
+      ->willReturn(['destination' => 'test']);
+
+    $this->customPageSubscriber = new CustomPageExceptionHtmlSubscriber($this->configFactory, $this->aliasManager, $this->kernel, $this->logger, $this->redirectDestination);
 
     // You can't create an exception in PHP without throwing it. Store the
     // current error_log, and disable it temporarily.
@@ -124,7 +137,6 @@ class CustomPageExceptionHtmlSubscriberTest extends UnitTestCase {
     $this->setupStubAliasManager();
 
     $request = Request::create('/test', 'GET', array('name' => 'druplicon', 'pass' => '12345'));
-    $request->attributes->set('_system_path', 'test');
 
     $this->kernel->expects($this->once())->method('handle')->will($this->returnCallback(function (Request $request) {
       return new Response($request->getMethod() . ' ' . UrlHelper::buildQuery($request->query->all()));
@@ -139,3 +151,4 @@ class CustomPageExceptionHtmlSubscriberTest extends UnitTestCase {
   }
 
 }
+

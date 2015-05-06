@@ -61,15 +61,11 @@ class MigrateExecutableTest extends MigrateTestCase {
    * Tests an import with an incomplete rewinding.
    */
   public function testImportWithFailingRewind() {
-    $iterator = $this->getMock('\Iterator');
     $exception_message = $this->getRandomGenerator()->string();
-    $iterator->expects($this->once())
+    $source = $this->getMock('Drupal\migrate\Plugin\MigrateSourceInterface');
+    $source->expects($this->once())
       ->method('rewind')
       ->will($this->throwException(new \Exception($exception_message)));
-    $source = $this->getMock('Drupal\migrate\Plugin\MigrateSourceInterface');
-    $source->expects($this->any())
-      ->method('getIterator')
-      ->will($this->returnValue($iterator));
 
     $this->migration->expects($this->any())
       ->method('getSourcePlugin')
@@ -358,7 +354,7 @@ class MigrateExecutableTest extends MigrateTestCase {
     $this->executable->setTimeElapsed(1);
     $this->assertTrue($this->executable->timeOptionExceeded());
     // Assert time limit not exceeded.
-    $this->executable->limit = array('unit' => 'seconds', 'value' => (REQUEST_TIME - 3600));
+    $this->executable->limit = array('unit' => 'seconds', 'value' => (int) $_SERVER['REQUEST_TIME'] - 3600);
     $this->assertFalse($this->executable->timeOptionExceeded());
     // Assert no time limit.
     $this->executable->limit = array();
@@ -500,20 +496,25 @@ class MigrateExecutableTest extends MigrateTestCase {
   /**
    * Returns a mock migration source instance.
    *
-   * @return \Drupal\migrate\Source|\PHPUnit_Framework_MockObject_MockObject
+   * @return \Drupal\migrate\Plugin\MigrateSourceInterface|\PHPUnit_Framework_MockObject_MockObject
    */
   protected function getMockSource() {
     $iterator = $this->getMock('\Iterator');
 
-    $source = $this->getMockBuilder('Drupal\migrate\Source')
+    $class = 'Drupal\migrate\Plugin\migrate\source\SourcePluginBase';
+    $source = $this->getMockBuilder($class)
       ->disableOriginalConstructor()
-      ->getMock();
+      ->setMethods(get_class_methods($class))
+      ->getMockForAbstractClass();
     $source->expects($this->any())
       ->method('getIterator')
       ->will($this->returnValue($iterator));
     $source->expects($this->once())
       ->method('rewind')
       ->will($this->returnValue(TRUE));
+    $source->expects($this->any())
+      ->method('initializeIterator')
+      ->will($this->returnValue([]));
     $source->expects($this->any())
       ->method('valid')
       ->will($this->onConsecutiveCalls(TRUE, FALSE));

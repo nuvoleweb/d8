@@ -7,7 +7,7 @@
 
 namespace Drupal\Core\Field\Entity;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\Field\FieldConfigBase;
@@ -89,10 +89,10 @@ class BaseFieldOverride extends FieldConfigBase {
       throw new FieldException('Attempt to create a base field bundle override of a field without a field_name');
     }
     if (empty($values['entity_type'])) {
-      throw new FieldException(String::format('Attempt to create a base field bundle override of field @field_name without an entity_type', array('@field_name' => $values['field_name'])));
+      throw new FieldException(SafeMarkup::format('Attempt to create a base field bundle override of field @field_name without an entity_type', array('@field_name' => $values['field_name'])));
     }
     if (empty($values['bundle'])) {
-      throw new FieldException(String::format('Attempt to create a base field bundle override of field @field_name without a bundle', array('@field_name' => $values['field_name'])));
+      throw new FieldException(SafeMarkup::format('Attempt to create a base field bundle override of field @field_name without a bundle', array('@field_name' => $values['field_name'])));
     }
 
     parent::__construct($values, $entity_type);
@@ -154,8 +154,12 @@ class BaseFieldOverride extends FieldConfigBase {
    *   BaseFieldOverride::allowBundleRename() has not been called.
    */
   public function preSave(EntityStorageInterface $storage) {
-    // Set the default instance settings.
-    $this->settings += \Drupal::service('plugin.manager.field.field_type')->getDefaultInstanceSettings($this->getType());
+    // Filter out unknown settings and make sure all settings are present, so
+    // that a complete field definition is passed to the various hooks and
+    // written to config.
+    $field_type_manager = \Drupal::service('plugin.manager.field.field_type');
+    $default_settings = $field_type_manager->getDefaultFieldSettings($this->getType());
+    $this->settings = array_intersect_key($this->settings, $default_settings) + $default_settings;
 
     // Call the parent's presave method to perform validate and calculate
     // dependencies.
@@ -170,10 +174,10 @@ class BaseFieldOverride extends FieldConfigBase {
     else {
       // Some updates are always disallowed.
       if ($this->entity_type != $this->original->entity_type) {
-        throw new FieldException(String::format('Cannot change the entity_type of an existing base field bundle override (entity type:@entity_type, bundle:@bundle, field name: @field_name)', array('@field_name' => $this->field_name, '@entity_type' => $this->entity_type, '@bundle' => $this->original->bundle)));
+        throw new FieldException(SafeMarkup::format('Cannot change the entity_type of an existing base field bundle override (entity type:@entity_type, bundle:@bundle, field name: @field_name)', array('@field_name' => $this->field_name, '@entity_type' => $this->entity_type, '@bundle' => $this->original->bundle)));
       }
       if ($this->bundle != $this->original->bundle && empty($this->bundleRenameAllowed)) {
-        throw new FieldException(String::format('Cannot change the bundle of an existing base field bundle override (entity type:@entity_type, bundle:@bundle, field name: @field_name)', array('@field_name' => $this->field_name, '@entity_type' => $this->entity_type, '@bundle' => $this->original->bundle)));
+        throw new FieldException(SafeMarkup::format('Cannot change the bundle of an existing base field bundle override (entity type:@entity_type, bundle:@bundle, field name: @field_name)', array('@field_name' => $this->field_name, '@entity_type' => $this->entity_type, '@bundle' => $this->original->bundle)));
       }
       $previous_definition = $this->original;
     }

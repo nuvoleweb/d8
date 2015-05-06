@@ -37,7 +37,6 @@ class LanguageServiceProvider extends ServiceProviderBase {
         ->addTag('path_processor_inbound', array('priority' => 300))
         ->addTag('path_processor_outbound', array('priority' => 100))
         ->addArgument(new Reference('config.factory'))
-        ->addArgument(new Reference('settings'))
         ->addArgument(new Reference('language_manager'))
         ->addArgument(new Reference('language_negotiator'))
         ->addArgument(new Reference('current_user'));
@@ -92,15 +91,15 @@ class LanguageServiceProvider extends ServiceProviderBase {
    *
    * @return array|bool
    *   Returns the default language values for the language configured in
-   *   system.site:langcode if the corresponding configuration entity exists,
-   *   otherwise FALSE.
+   *   system.site:default_langcode if the corresponding configuration entity
+   *   exists, otherwise FALSE.
    */
   protected function getDefaultLanguageValues() {
     $config_storage = BootstrapConfigStorageFactory::get();
     $system = $config_storage->read('system.site');
-    $default_language = $config_storage->read(static::CONFIG_PREFIX . $system['langcode']);
+    $default_language = $config_storage->read(static::CONFIG_PREFIX . $system['default_langcode']);
     if (is_array($default_language)) {
-      return $default_language + array('default' => TRUE);
+      return $default_language;
     }
     return FALSE;
   }

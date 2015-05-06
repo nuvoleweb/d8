@@ -26,10 +26,10 @@ class LinkCancel extends Link {
     if ($entity && $entity->access('delete')) {
       $this->options['alter']['make_link'] = TRUE;
 
-      $text = !empty($this->options['text']) ? $this->options['text'] : t('Cancel account');
+      $text = !empty($this->options['text']) ? $this->options['text'] : $this->t('Cancel account');
 
-      $this->options['alter']['path'] = $entity->getSystemPath('cancel-form');
-      $this->options['alter']['query'] = drupal_get_destination();
+      $this->options['alter']['url'] = $entity->urlInfo('cancel-form');
+      $this->options['alter']['query'] = $this->getDestinationArray();
 
       return $text;
     }

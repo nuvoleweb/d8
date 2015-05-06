@@ -41,7 +41,7 @@
 
       // Store the actual value of this field. We'll need this to restore the
       // original value when the user discards his modifications.
-      this.$textElement = this.$el.find('.field-item:first');
+      this.$textElement = this.$el.find('.field-item').eq(0);
       this.model.set('originalValue', this.$textElement.html());
     },
 
@@ -68,6 +68,14 @@
           // of the states where it could have been attached.
           if (from !== 'inactive' && from !== 'highlighted') {
             this.textEditor.detach(this.$textElement.get(0), this.textFormat);
+          }
+          // A field model's editor view revert() method is invoked when an
+          // 'active' field becomes a 'candidate' field. But, in the case of
+          // this in-place editor, the content will have been *replaced* if the
+          // text format has transformation filters. Therefore, if we stop
+          // in-place editing this entity, revert explicitly.
+          if (from === 'active' && this.textFormatHasTransformations) {
+            this.revert();
           }
           if (from === 'invalid') {
             this.removeValidationErrors();
@@ -138,7 +146,7 @@
      * {@inheritdoc}
      */
     getQuickEditUISettings: function () {
-      return { padding: true, unifiedToolbar: true, fullWidthToolbar: true, popup: false };
+      return {padding: true, unifiedToolbar: true, fullWidthToolbar: true, popup: false};
     },
 
     /**
@@ -166,8 +174,8 @@
       var textLoaderAjax = new Drupal.ajax(fieldID, this.$el, {
         url: Drupal.quickedit.util.buildUrl(fieldID, Drupal.url('editor/!entity_type/!id/!field_name/!langcode/!view_mode')),
         event: 'editor-internal.editor',
-        submit: { nocssjs: true },
-        progress: { type: null } // No progress indicator.
+        submit: {nocssjs: true},
+        progress: {type: null} // No progress indicator.
       });
 
       // Implement a scoped editorGetUntransformedText AJAX command: calls the

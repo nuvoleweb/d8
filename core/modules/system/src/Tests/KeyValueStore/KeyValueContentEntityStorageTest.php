@@ -9,27 +9,35 @@ namespace Drupal\system\Tests\KeyValueStore;
 
 use Drupal\Core\Entity\EntityMalformedException;
 use Drupal\Core\Entity\EntityStorageException;
-use Drupal\simpletest\DrupalUnitTestBase;
+use Drupal\simpletest\KernelTestBase;
 
 /**
  * Tests KeyValueEntityStorage for content entities.
  *
  * @group KeyValueStore
  */
-class KeyValueContentEntityStorageTest extends DrupalUnitTestBase {
+class KeyValueContentEntityStorageTest extends KernelTestBase {
 
   /**
    * Modules to enable.
    *
    * @var array
    */
-  public static $modules = array('entity', 'user', 'entity_test', 'keyvalue_test');
+  public static $modules = array('user', 'entity_test', 'keyvalue_test');
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function setUp() {
+    parent::setUp();
+    $this->installEntitySchema('user');
+  }
 
   /**
    * Tests CRUD operations.
    */
   function testCRUD() {
-    $default_langcode = language_default()->id;
+    $default_langcode = \Drupal::languageManager()->getDefaultLanguage()->getId();
     // Verify default properties on a newly created empty entity.
     $empty = entity_create('entity_test_label');
     $this->assertIdentical($empty->id->value, NULL);

@@ -1,12 +1,9 @@
 # Schema for the configuration files of the User module.
 
 user.settings:
-  type: mapping
+  type: config_object
   label: 'User settings'
   mapping:
-    admin_role:
-      type: string
-      label: 'Administrator role'
     anonymous:
       type: label
       label: 'Name'
@@ -29,7 +26,7 @@ user.settings:
         status_blocked:
           type: boolean
           label: 'Account blocked'
-        status_cancelled:
+        status_canceled:
           type: boolean
           label: 'Account canceled'
         register_admin_created:
@@ -44,9 +41,6 @@ user.settings:
     register:
       type: string
       label: 'Who can register accounts?'
-    signatures:
-      type: boolean
-      label: 'Enable signatures'
     cancel_method:
       type: string
       label: 'When cancelling a user account'
@@ -56,12 +50,9 @@ user.settings:
     password_strength:
       type: boolean
       label: 'Enable password strength indicator'
-    langcode:
-      type: string
-      label: 'Default language'
 
 user.mail:
- type: mapping
+ type: config_object
  label: 'Email settings'
  mapping:
   cancel_confirm:
@@ -91,12 +82,9 @@ user.mail:
   status_canceled:
     type: mail
     label: 'Account cancelled'
-  langcode:
-    type: string
-    label: 'Default language'
 
 user.flood:
-  type: mapping
+  type: config_object
   label: 'User flood settings'
   mapping:
     uid_only:
@@ -128,12 +116,15 @@ user.role.*:
     weight:
       type: integer
       label: 'User role weight'
+    is_admin:
+      type: boolean
+      label: 'User is admin'
     permissions:
       type: sequence
       label: 'Permissions'
       sequence:
-        - type: string
-          label: 'Permission'
+        type: string
+        label: 'Permission'
 
 action.configuration.user_add_role_action:
   type: mapping
@@ -173,4 +164,31 @@ condition.plugin.user_role:
     roles:
       type: sequence
       sequence:
-        - type: string
+        type: string
+
+entity_reference_selection.default:user:
+  type: entity_reference_selection
+  mapping:
+    filter:
+      type: mapping
+      label: 'Filter settings'
+      mapping:
+        type:
+          type: string
+          label: 'Filter by'
+        role:
+          type: sequence
+          label: 'Restrict to the selected roles'
+          sequence:
+            type: string
+            label: 'Role'
+    include_anonymous:
+      type: boolean
+      label: 'Include the anonymous user in the matched entities.'
+
+field.formatter.settings.user_name:
+  type: mapping
+  mapping:
+    link_to_entity:
+      type: boolean
+      label: 'Link to the user'

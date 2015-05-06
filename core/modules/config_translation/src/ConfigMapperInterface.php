@@ -205,22 +205,6 @@ interface ConfigMapperInterface {
   public function getLangcode();
 
   /**
-   * Returns language object for the configuration.
-   *
-   * If the language of the configuration files is not a configured language on
-   * the site and it is English, we return a dummy language object to represent
-   * the built-in language.
-   *
-   * @return \Drupal\Core\Language\LanguageInterface
-   *   A configured language object instance or a dummy English language object.
-   *
-   * @throws \RuntimeException
-   *   Throws an exception if the language codes in the config files don't
-   *   match.
-   */
-  public function getLanguageWithFallback();
-
-  /**
    * Returns the name of the type of data the mapper encapsulates.
    *
    * @return string
@@ -280,6 +264,8 @@ interface ConfigMapperInterface {
 
   /**
    * Populate the config mapper with request data.
+   *
+   * @todo Replace $request with RouteMatch https://www.drupal.org/node/2295255.
    *
    * @param \Symfony\Component\HttpFoundation\Request $request
    *   Page request object.

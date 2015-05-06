@@ -7,7 +7,6 @@
 
 namespace Drupal\Core\Entity\Query;
 
-use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Database\Query\AlterableInterface;
 
 /**
@@ -54,7 +53,7 @@ interface QueryInterface extends AlterableInterface {
    *   same delta within that field.
    * @param $value
    *   The value for $field. In most cases, this is a scalar and it's treated as
-   *   case-insensitive. For more complex options, it is an array. The meaning
+   *   case-insensitive. For more complex operators, it is an array. The meaning
    *   of each element in the array is dependent on $operator.
    * @param $operator
    *   Possible values:
@@ -149,9 +148,11 @@ interface QueryInterface extends AlterableInterface {
    * Enables sortable tables for this query.
    *
    * @param $headers
-   *   An array of headers of the same structure as described in theme_table().
-   *   Use a 'specifier' in place of a 'field' to specify what to sort on.
-   *   This can be an entity or a field as described in condition().
+   *   An array of headers of the same structure as described in
+   *   template_preprocess_table(). Use a 'specifier' in place of a 'field' to
+   *   specify what to sort on. This can be an entity or a field as described
+   *   in condition().
+   *
    * @return \Drupal\Core\Entity\Query\QueryInterface
    *   The called object.
    */
@@ -162,24 +163,6 @@ interface QueryInterface extends AlterableInterface {
    *   The called object.
    */
   public function accessCheck($access_check = TRUE);
-
-  /**
-   * Queries the current or every revision.
-   *
-   * Note that this only affects field conditions. Property conditions always
-   * apply to the current revision.
-   * @TODO: Once revision tables have been cleaned up, revisit this.
-   *
-   * @param $age
-   *   - EntityStorageInterface::FIELD_LOAD_CURRENT (default): Query
-   *     the most recent revisions only,
-   *   - EntityStorageInterface::FIELD_LOAD_REVISION: Query all
-   *     revisions.
-   *
-   * @return \Drupal\Core\Entity\Query\QueryInterface
-   *   The called object.
-   */
-  public function age($age = EntityStorageInterface::FIELD_LOAD_CURRENT);
 
   /**
    * Execute the query.
@@ -241,5 +224,19 @@ interface QueryInterface extends AlterableInterface {
    * @return \Drupal\Core\Entity\Query\ConditionInterface
    */
   public function orConditionGroup();
+
+  /**
+   * Queries the current revision.
+   *
+   * @return $this
+   */
+  public function currentRevision();
+
+  /**
+   * Queries all the revisions.
+   *
+   * @return $this
+   */
+  public function allRevisions();
 
 }

@@ -8,6 +8,7 @@
 namespace Drupal\user\Tests;
 
 use Drupal\simpletest\WebTestBase;
+use Drupal\user\Entity\User;
 
 /**
  * Tests account saving for arbitrary new uid.
@@ -21,7 +22,12 @@ class UserSaveTest extends WebTestBase {
    */
   function testUserImport() {
     // User ID must be a number that is not in the database.
-    $max_uid = db_query('SELECT MAX(uid) FROM {users}')->fetchField();
+
+    $uids = \Drupal::entityManager()->getStorage('user')->getQuery()
+      ->sort('uid', 'DESC')
+      ->range(0, 1)
+      ->execute();
+    $max_uid = reset($uids);
     $test_uid = $max_uid + mt_rand(1000, 1000000);
     $test_name = $this->randomMachineName();
 
@@ -37,7 +43,7 @@ class UserSaveTest extends WebTestBase {
     $user->save();
 
     // Test if created user exists.
-    $user_by_uid = user_load($test_uid);
+    $user_by_uid = User::load($test_uid);
     $this->assertTrue($user_by_uid, 'Loading user by uid.');
 
     $user_by_name = user_load_by_name($test_name);

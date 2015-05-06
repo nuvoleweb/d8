@@ -7,7 +7,7 @@
 
 namespace Drupal\system\Plugin\ImageToolkit\Operation\gd;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 
 /**
  * Defines GD2 Crop operation.
@@ -67,10 +67,10 @@ class Crop extends GDImageToolkitOperationBase {
 
     // Fail when width or height are 0 or negative.
     if ($arguments['width'] <= 0) {
-      throw new \InvalidArgumentException(String::format("Invalid width (@value) specified for the image 'crop' operation", array('@value' => $arguments['width'])));
+      throw new \InvalidArgumentException(SafeMarkup::format("Invalid width (@value) specified for the image 'crop' operation", array('@value' => $arguments['width'])));
     }
     if ($arguments['height'] <= 0) {
-      throw new \InvalidArgumentException(String::format("Invalid height (@value) specified for the image 'crop' operation", array('@value' => $arguments['height'])));
+      throw new \InvalidArgumentException(SafeMarkup::format("Invalid height (@value) specified for the image 'crop' operation", array('@value' => $arguments['height'])));
     }
 
     return $arguments;
@@ -80,17 +80,23 @@ class Crop extends GDImageToolkitOperationBase {
    * {@inheritdoc}
    */
   protected function execute(array $arguments) {
-    $res = $this->getToolkit()->createTmp($this->getToolkit()->getType(), $arguments['width'], $arguments['height']);
-
-    if (!imagecopyresampled($res, $this->getToolkit()->getResource(), 0, 0, $arguments['x'], $arguments['y'], $arguments['width'], $arguments['height'], $arguments['width'], $arguments['height'])) {
-      return FALSE;
+    // Create a new resource of the required dimensions, and copy and resize
+    // the original resource on it with resampling. Destroy the original
+    // resource upon success.
+    $original_resource = $this->getToolkit()->getResource();
+    $data = array(
+      'width' => $arguments['width'],
+      'height' => $arguments['height'],
+      'extension' => image_type_to_extension($this->getToolkit()->getType(), FALSE),
+      'transparent_color' => $this->getToolkit()->getTransparentColor()
+    );
+    if ($this->getToolkit()->apply('create_new', $data)) {
+      if (imagecopyresampled($this->getToolkit()->getResource(), $original_resource, 0, 0, $arguments['x'], $arguments['y'], $arguments['width'], $arguments['height'], $arguments['width'], $arguments['height'])) {
+        imagedestroy($original_resource);
+        return TRUE;
+      }
     }
-
-    // Destroy the original image and return the modified image.
-    imagedestroy($this->getToolkit()->getResource());
-    $this->getToolkit()->setResource($res);
-
-    return TRUE;
+    return FALSE;
   }
 
 }

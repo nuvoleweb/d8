@@ -2,20 +2,20 @@
 
 /**
  * @file
- * Definition of Drupal\comment\CommentViewBuilder.
+ * Contents Drupal\comment\CommentViewBuilder.
  */
 
 namespace Drupal\comment;
 
-use Drupal\comment\Plugin\Field\FieldType\CommentItemInterface;
-use Drupal\Core\Access\CsrfTokenGenerator;
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\Display\EntityViewDisplayInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityManagerInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Entity\EntityViewBuilder;
-use Drupal\Core\Entity\Entity\EntityViewDisplay;
 use Drupal\Core\Language\LanguageManagerInterface;
+use Drupal\Core\Render\Element;
+use Drupal\Core\Session\AccountInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -24,30 +24,11 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 class CommentViewBuilder extends EntityViewBuilder {
 
   /**
-   * The module handler service.
+   * The current user.
    *
-   * @var \Drupal\Core\Extension\ModuleHandlerInterface
+   * @var \Drupal\Core\Session\AccountInterface
    */
-  protected $moduleHandler;
-
-  /**
-   * The CSRF token manager service.
-   *
-   * @var \Drupal\Core\Access\CsrfTokenGenerator
-   */
-  protected $csrfToken;
-
-  /**
-   * {@inheritdoc}
-   */
-  public static function createInstance(ContainerInterface $container, EntityTypeInterface $entity_type) {
-    return new static(
-      $entity_type,
-      $container->get('entity.manager'),
-      $container->get('language_manager'),
-      $container->get('csrf_token')
-    );
-  }
+  protected $currentUser;
 
   /**
    * Constructs a new CommentViewBuilder.
@@ -58,16 +39,50 @@ class CommentViewBuilder extends EntityViewBuilder {
    *   The entity manager service.
    * @param \Drupal\Core\Language\LanguageManagerInterface $language_manager
    *   The language manager.
-   * @param \Drupal\Core\Access\CsrfTokenGenerator $csrf_token
-   *   The CSRF token manager service.
+   * @param \Drupal\Core\Session\AccountInterface $current_user
+   *   The current user.
    */
-  public function __construct(EntityTypeInterface $entity_type, EntityManagerInterface $entity_manager, LanguageManagerInterface $language_manager, CsrfTokenGenerator $csrf_token) {
+  public function __construct(EntityTypeInterface $entity_type, EntityManagerInterface $entity_manager, LanguageManagerInterface $language_manager, AccountInterface $current_user) {
     parent::__construct($entity_type, $entity_manager, $language_manager);
-    $this->csrfToken = $csrf_token;
+    $this->currentUser = $current_user;
   }
 
   /**
-   * Overrides Drupal\Core\Entity\EntityViewBuilder::buildComponents().
+   * {@inheritdoc}
+   */
+  public static function createInstance(ContainerInterface $container, EntityTypeInterface $entity_type) {
+    return new static(
+      $entity_type,
+      $container->get('entity.manager'),
+      $container->get('language_manager'),
+      $container->get('current_user')
+    );
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function getBuildDefaults(EntityInterface $entity, $view_mode, $langcode) {
+    $build = parent::getBuildDefaults($entity, $view_mode, $langcode);
+
+    /** @var \Drupal\comment\CommentInterface $entity */
+    // Store a threading field setting to use later in self::buildComponents().
+    $build['#comment_threaded'] = $entity->getCommentedEntity()
+      ->getFieldDefinition($entity->getFieldName())
+      ->getSetting('default_mode') === CommentManagerInterface::COMMENT_MODE_THREADED;
+    // If threading is enabled, don't render cache individual comments, but do
+    // keep the cache tags, so they can bubble up.
+    if ($build['#comment_threaded']) {
+      $cache_tags = $build['#cache']['tags'];
+      $build['#cache'] = [];
+      $build['#cache']['tags'] = $cache_tags;
+    }
+
+    return $build;
+  }
+
+  /**
+   * {@inheritdoc}
    *
    * In addition to modifying the content key on entities, this implementation
    * will also set the comment entity key which all comments carry.
@@ -90,31 +105,36 @@ class CommentViewBuilder extends EntityViewBuilder {
 
     parent::buildComponents($build, $entities, $displays, $view_mode, $langcode);
 
-    // Load all the entities that have comments attached.
-    $commented_entity_ids = array();
-    $commented_entities = array();
-    foreach ($entities as $entity) {
-      $commented_entity_ids[$entity->getCommentedEntityTypeId()][] = $entity->getCommentedEntityId();
-    }
-    // Load entities in bulk. This is more performant than using
-    // $comment->getCommentedEntity() as we can load them in bulk per type.
-    foreach ($commented_entity_ids as $entity_type => $entity_ids) {
-      $commented_entities[$entity_type] = $this->entityManager->getStorage($entity_type)->loadMultiple($entity_ids);
-    }
+    // A counter to track the indentation level.
+    $current_indent = 0;
 
     foreach ($entities as $id => $entity) {
-      if (isset($commented_entities[$entity->getCommentedEntityTypeId()][$entity->getCommentedEntityId()])) {
-        $commented_entity = $commented_entities[$entity->getCommentedEntityTypeId()][$entity->getCommentedEntityId()];
+      if ($build[$id]['#comment_threaded']) {
+        $comment_indent = count(explode('.', $entity->getThread())) - 1;
+        if ($comment_indent > $current_indent) {
+          // Set 1 to indent this comment from the previous one (its parent).
+          // Set only one extra level of indenting even if the difference in
+          // depth is higher.
+          $build[$id]['#comment_indent'] = 1;
+          $current_indent++;
+        }
+        else {
+          // Set zero if this comment is on the same level as the previous one
+          // or negative value to point an amount indents to close.
+          $build[$id]['#comment_indent'] = $comment_indent - $current_indent;
+          $current_indent = $comment_indent;
+        }
       }
-      else {
-        throw new \InvalidArgumentException(t('Invalid entity for comment.'));
-      }
+
+      // Commented entities already loaded after self::getBuildDefaults().
+      $commented_entity = $entity->getCommentedEntity();
+
       $build[$id]['#entity'] = $entity;
       $build[$id]['#theme'] = 'comment__' . $entity->getFieldName() . '__' . $commented_entity->bundle();
 
       $display = $displays[$entity->bundle()];
       if ($display->getComponent('links')) {
-        $callback = '\Drupal\comment\CommentViewBuilder::renderLinks';
+        $callback = 'comment.post_render_cache:renderLinks';
         $context = array(
           'comment_entity_id' => $entity->id(),
           'view_mode' => $view_mode,
@@ -134,21 +154,11 @@ class CommentViewBuilder extends EntityViewBuilder {
         );
       }
 
-      $account = comment_prepare_author($entity);
-      if (\Drupal::config('user.settings')->get('signatures') && $account->getSignature()) {
-        $build[$id]['signature'] = array(
-          '#type' => 'processed_text',
-          '#text' => $account->getSignature(),
-          '#format' => $account->getSignatureFormat(),
-          '#langcode' => $entity->language()->getId(),
-        );
-      }
-
       if (!isset($build[$id]['#attached'])) {
         $build[$id]['#attached'] = array();
       }
       $build[$id]['#attached']['library'][] = 'comment/drupal.comment-by-viewer';
-      if ($this->moduleHandler->moduleExists('history') &&  \Drupal::currentUser()->isAuthenticated()) {
+      if ($this->moduleHandler->moduleExists('history') && $this->currentUser->isAuthenticated()) {
         $build[$id]['#attached']['library'][] = 'comment/drupal.comment-new-indicator';
 
         // Embed the metadata for the comment "new" indicators on this node.
@@ -157,126 +167,10 @@ class CommentViewBuilder extends EntityViewBuilder {
         );
       }
     }
-  }
-
-  /**
-   * #post_render_cache callback; replaces the placeholder with comment links.
-   *
-   * Renders the links on a comment.
-   *
-   * @param array $element
-   *   The renderable array that contains the to be replaced placeholder.
-   * @param array $context
-   *   An array with the following keys:
-   *   - comment_entity_id: a comment entity ID
-   *   - view_mode: the view mode in which the comment entity is being viewed
-   *   - langcode: in which language the comment entity is being viewed
-   *   - commented_entity_type: the entity type to which the comment is attached
-   *   - commented_entity_id: the entity ID to which the comment is attached
-   *   - in_preview: whether the comment is currently being previewed
-   *
-   * @return array
-   *   A renderable array representing the comment links.
-   */
-  public static function renderLinks(array $element, array $context) {
-    $callback = '\Drupal\comment\CommentViewBuilder::renderLinks';
-    $placeholder = drupal_render_cache_generate_placeholder($callback, $context);
-    $links = array(
-      '#theme' => 'links__comment',
-      '#pre_render' => array('drupal_pre_render_links'),
-      '#attributes' => array('class' => array('links', 'inline')),
-    );
-
-    if (!$context['in_preview']) {
-      $entity = entity_load('comment', $context['comment_entity_id']);
-      $commented_entity = entity_load($context['commented_entity_type'], $context['commented_entity_id']);
-
-      $links['comment'] = self::buildLinks($entity, $commented_entity);
-
-      // Allow other modules to alter the comment links.
-      $hook_context = array(
-        'view_mode' => $context['view_mode'],
-        'langcode' => $context['langcode'],
-        'commented_entity' => $commented_entity
-      );
-      \Drupal::moduleHandler()->alter('comment_links', $links, $entity, $hook_context);
+    if ($build[$id]['#comment_threaded']) {
+      // The final comment must close up some hanging divs.
+      $build[$id]['#comment_indent_final'] = $current_indent;
     }
-    $markup = drupal_render($links);
-    $element['#markup'] = str_replace($placeholder, $markup, $element['#markup']);
-
-    return $element;
-  }
-
-  /**
-   * Build the default links (reply, edit, delete …) for a comment.
-   *
-   * @param \Drupal\comment\CommentInterface $entity
-   *   The comment object.
-   * @param \Drupal\Core\Entity\EntityInterface $commented_entity
-   *   The entity to which the comment is attached.
-   *
-   * @return array
-   *   An array that can be processed by drupal_pre_render_links().
-   */
-  protected static function buildLinks(CommentInterface $entity, EntityInterface $commented_entity) {
-    $links = array();
-    $status = $commented_entity->get($entity->getFieldName())->status;
-
-    $container = \Drupal::getContainer();
-
-    if ($status == CommentItemInterface::OPEN) {
-      if ($entity->access('delete')) {
-        $links['comment-delete'] = array(
-          'title' => t('Delete'),
-          'href' => "comment/{$entity->id()}/delete",
-          'html' => TRUE,
-        );
-      }
-
-      if ($entity->access('update')) {
-        $links['comment-edit'] = array(
-          'title' => t('Edit'),
-          'href' => "comment/{$entity->id()}/edit",
-          'html' => TRUE,
-        );
-      }
-      if ($entity->access('create')) {
-        $links['comment-reply'] = array(
-          'title' => t('Reply'),
-          'href' => "comment/reply/{$entity->getCommentedEntityTypeId()}/{$entity->getCommentedEntityId()}/{$entity->getFieldName()}/{$entity->id()}",
-          'html' => TRUE,
-        );
-      }
-      if (!$entity->isPublished() && $entity->access('approve')) {
-        $links['comment-approve'] = array(
-          'title' => t('Approve'),
-          'route_name' => 'comment.approve',
-          'route_parameters' => array('comment' => $entity->id()),
-          'html' => TRUE,
-        );
-      }
-      if (empty($links) && \Drupal::currentUser()->isAnonymous()) {
-        $links['comment-forbidden']['title'] = \Drupal::service('comment.manager')->forbiddenMessage($commented_entity, $entity->getFieldName());
-        $links['comment-forbidden']['html'] = TRUE;
-      }
-    }
-
-    // Add translations link for translation-enabled comment bundles.
-    if (\Drupal::moduleHandler()->moduleExists('content_translation') && content_translation_translate_access($entity)->isAllowed()) {
-      $links['comment-translations'] = array(
-        'title' => t('Translate'),
-        'href' => 'comment/' . $entity->id() . '/translations',
-        'html' => TRUE,
-      );
-    }
-
-    return array(
-      '#theme' => 'links__comment__comment',
-      // The "entity" property is specified to be present, so no need to
-      // check.
-      '#links' => $links,
-      '#attributes' => array('class' => array('links', 'inline')),
-    );
   }
 
   /**
@@ -286,15 +180,11 @@ class CommentViewBuilder extends EntityViewBuilder {
     parent::alterBuild($build, $comment, $display, $view_mode, $langcode);
     if (empty($comment->in_preview)) {
       $prefix = '';
-      $commented_entity = $comment->getCommentedEntity();
-      $field_definition = $this->entityManager->getFieldDefinitions($commented_entity->getEntityTypeId(), $commented_entity->bundle())[$comment->getFieldName()];
-      $is_threaded = isset($comment->divs)
-        && $field_definition->getSetting('default_mode') == CommentManagerInterface::COMMENT_MODE_THREADED;
 
       // Add indentation div or close open divs as needed.
-      if ($is_threaded) {
-        $build['#attached']['css'][] = drupal_get_path('module', 'comment') . '/css/comment.theme.css';
-        $prefix .= $comment->divs <= 0 ? str_repeat('</div>', abs($comment->divs)) : "\n" . '<div class="indented">';
+      if ($build['#comment_threaded']) {
+        $build['#attached']['library'][] = 'comment/drupal.comment.threaded';
+        $prefix .= $build['#comment_indent'] <= 0 ? str_repeat('</div>', abs($build['#comment_indent'])) : "\n" . '<div class="indented">';
       }
 
       // Add anchor for each comment.
@@ -302,65 +192,10 @@ class CommentViewBuilder extends EntityViewBuilder {
       $build['#prefix'] = $prefix;
 
       // Close all open divs.
-      if ($is_threaded && !empty($comment->divs_final)) {
-        $build['#suffix'] = str_repeat('</div>', $comment->divs_final);
+      if (!empty($build['#comment_indent_final'])) {
+        $build['#suffix'] = str_repeat('</div>', $build['#comment_indent_final']);
       }
     }
-  }
-
-  /**
-   * #post_render_cache callback; attaches "X new comments" link metadata.
-   *
-   * @param array $element
-   *   A render array with the following keys:
-   *   - #markup
-   *   - #attached
-   * @param array $context
-   *   An array with the following keys:
-   *   - entity_type: an entity type
-   *   - entity_id: an entity ID
-   *   - field_name: a comment field name
-   *
-   * @return array $element
-   *   The updated $element.
-   */
-  public static function attachNewCommentsLinkMetadata(array $element, array $context) {
-    // Build "X new comments" link metadata.
-    $new = \Drupal::service('comment.manager')
-      ->getCountNewComments(entity_load($context['entity_type'], $context['entity_id']));
-    // Early-return if there are zero new comments for the current user.
-    if ($new === 0) {
-      return $element;
-    }
-    $entity = \Drupal::entityManager()
-      ->getStorage($context['entity_type'])
-      ->load($context['entity_id']);
-    $field_name = $context['field_name'];
-    $page_number = \Drupal::entityManager()
-      ->getStorage('comment')
-      ->getNewCommentPageNumber($entity->{$field_name}->comment_count, $new, $entity);
-    $query = $page_number ? array('page' => $page_number) : NULL;
-
-    // Attach metadata.
-    $element['#attached']['js'][] = array(
-      'type' => 'setting',
-      'data' => array(
-        'comment' => array(
-          'newCommentsLinks' => array(
-            $context['entity_type'] => array(
-              $context['field_name'] => array(
-                $context['entity_id'] => array(
-                  'new_comment_count' => (int)$new,
-                  'first_new_comment_link' => \Drupal::urlGenerator()->generateFromPath('node/' . $entity->id(), array('query' => $query, 'fragment' => 'new')),
-                )
-              )
-            ),
-          )
-        ),
-      ),
-    );
-
-    return $element;
   }
 
 }

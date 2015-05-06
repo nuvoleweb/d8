@@ -27,10 +27,7 @@ class EntityOperationsTest extends WebTestBase {
     parent::setUp();
 
     // Create and login user.
-    $this->web_user = $this->drupalCreateUser(array(
-      'administer permissions',
-    ));
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->drupalCreateUser(array('administer permissions')));
   }
 
   /**
@@ -48,4 +45,16 @@ class EntityOperationsTest extends WebTestBase {
     }
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  protected function drupalCreateRole(array $permissions, $rid = NULL, $name = NULL, $weight = NULL) {
+    // WebTestBase::drupalCreateRole() by default uses random strings which may
+    // include HTML entities for the entity label. Since in this test the entity
+    // label is used to generate a link, and AssertContentTrait::assertLink() is
+    // not designed to deal with links potentially containing HTML entities this
+    // causes random failures. Use a random HTML safe string instead.
+    $name = $name ?: $this->randomMachineName();
+    return parent::drupalCreateRole($permissions, $rid, $name, $weight);
+  }
 }

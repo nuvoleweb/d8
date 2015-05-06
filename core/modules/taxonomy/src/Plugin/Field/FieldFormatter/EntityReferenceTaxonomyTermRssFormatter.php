@@ -9,7 +9,7 @@ namespace Drupal\taxonomy\Plugin\Field\FieldFormatter;
 
 use Drupal\Core\Field\FieldDefinitionInterface;
 use Drupal\Core\Field\FieldItemListInterface;
-use Drupal\entity_reference\Plugin\Field\FieldFormatter\EntityReferenceFormatterBase;
+use Drupal\Core\Field\Plugin\Field\FieldFormatter\EntityReferenceFormatterBase;
 
 /**
  * Plugin implementation of the 'entity reference taxonomy term RSS' formatter.
@@ -29,15 +29,15 @@ class EntityReferenceTaxonomyTermRssFormatter extends EntityReferenceFormatterBa
    * {@inheritdoc}
    */
   public function viewElements(FieldItemListInterface $items) {
+    $parent_entity = $items->getEntity();
     $elements = array();
-    $entity = $items->getEntity();
 
-    foreach ($items as $item) {
-      $entity->rss_elements[] = array(
+    foreach ($this->getEntitiesToView($items) as $delta => $entity) {
+      $parent_entity->rss_elements[] = array(
         'key' => 'category',
-        'value' => $item->entity->label(),
+        'value' => $entity->label(),
         'attributes' => array(
-          'domain' => $item->target_id ? url('taxonomy/term/' . $item->target_id, array('absolute' => TRUE)) : '',
+          'domain' => $entity->id() ? \Drupal::url('entity.taxonomy_term.canonical', ['taxonomy_term' => $entity->id()], array('absolute' => TRUE)) : '',
         ),
       );
     }

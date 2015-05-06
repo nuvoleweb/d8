@@ -53,6 +53,8 @@ class TaggedHandlersPass implements CompilerPassInterface {
    *   - Optionally the handler's priority as second argument, if the method
    *     accepts a second parameter and its name is "priority". In any case, all
    *     handlers registered at compile time are sorted already.
+   * - required: Boolean indicating if at least one handler service is required.
+   *   Defaults to FALSE.
    *
    * Example (YAML):
    * @code
@@ -74,12 +76,15 @@ class TaggedHandlersPass implements CompilerPassInterface {
    *   interface.
    * @throws \Symfony\Component\DependencyInjection\Exception\LogicException
    *   If a tagged handler does not implement the required interface.
+   * @throws \Symfony\Component\DependencyInjection\Exception\LogicException
+   *   If at least one tagged service is required but none are found.
    */
   public function process(ContainerBuilder $container) {
     foreach ($container->findTaggedServiceIds('service_collector') as $consumer_id => $passes) {
       foreach ($passes as $pass) {
         $tag = isset($pass['tag']) ? $pass['tag'] : $consumer_id;
         $method_name = isset($pass['call']) ? $pass['call'] : 'addHandler';
+        $required = isset($pass['required']) ? $pass['required'] : FALSE;
 
         // Determine parameters.
         $consumer = $container->getDefinition($consumer_id);
@@ -89,15 +94,19 @@ class TaggedHandlersPass implements CompilerPassInterface {
         $interface_pos = 0;
         $id_pos = NULL;
         $priority_pos = NULL;
+        $extra_params = [];
         foreach ($params as $pos => $param) {
           if ($param->getClass()) {
             $interface = $param->getClass();
           }
-          if ($param->getName() == 'id') {
+          else if ($param->getName() === 'id') {
             $id_pos = $pos;
           }
-          if ($param->getName() == 'priority') {
+          else if ($param->getName() === 'priority') {
             $priority_pos = $pos;
+          }
+          else {
+            $extra_params[$param->getName()] = $pos;
           }
         }
         // Determine the ID.
@@ -113,6 +122,7 @@ class TaggedHandlersPass implements CompilerPassInterface {
 
         // Find all tagged handlers.
         $handlers = array();
+        $extra_arguments = array();
         foreach ($container->findTaggedServiceIds($tag) as $id => $attributes) {
           // Validate the interface.
           $handler = $container->getDefinition($id);
@@ -120,8 +130,15 @@ class TaggedHandlersPass implements CompilerPassInterface {
             throw new LogicException("Service '$id' for consumer '$consumer_id' does not implement $interface.");
           }
           $handlers[$id] = isset($attributes[0]['priority']) ? $attributes[0]['priority'] : 0;
+          // Keep track of other tagged handlers arguments.
+          foreach ($extra_params as $name => $pos) {
+            $extra_arguments[$id][$pos] = isset($attributes[0][$name]) ? $attributes[0][$name] : $params[$pos]->getDefaultValue();
+          }
         }
         if (empty($handlers)) {
+          if ($required) {
+            throw new LogicException(sprintf("At least one service tagged with '%s' is required.", $tag));
+          }
           continue;
         }
         // Sort all handlers by priority.
@@ -137,6 +154,11 @@ class TaggedHandlersPass implements CompilerPassInterface {
           }
           if (isset($id_pos)) {
             $arguments[$id_pos] = $id;
+          }
+          // Add in extra arguments.
+          if (isset($extra_arguments[$id])) {
+            // Place extra arguments in their right positions.
+            $arguments += $extra_arguments[$id];
           }
           // Sort the arguments by position.
           ksort($arguments);

@@ -31,6 +31,13 @@ class InstallerExistingSettingsTest extends InstallerTestBase {
       'required' => TRUE,
     );
 
+    // During interactive install we'll change this to a different profile and
+    // this test will ensure that the new value is written to settings.php.
+    $this->settings['settings']['install_profile'] = (object) array(
+      'value' => 'minimal',
+      'required' => TRUE,
+    );
+
     // Pre-configure database credentials.
     $connection_info = Database::getConnectionInfo();
     unset($connection_info['default']['pdo']);
@@ -72,6 +79,7 @@ class InstallerExistingSettingsTest extends InstallerTestBase {
   public function testInstaller() {
     $this->assertUrl('user/1');
     $this->assertResponse(200);
+    $this->assertEqual('testing', drupal_get_profile(), 'Profile was changed from minimal to testing during interactive install.');
   }
 
 }

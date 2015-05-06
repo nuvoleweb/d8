@@ -7,7 +7,9 @@
 
 namespace Drupal\rdf\Tests;
 
+use Drupal\image\Entity\ImageStyle;
 use Drupal\image\Tests\ImageFieldTestBase;
+use Drupal\node\Entity\Node;
 
 /**
  * Tests the RDFa markup of imagefields.
@@ -58,14 +60,15 @@ class ImageFieldAttributesTest extends ImageFieldTestBase {
         'properties' => array('og:image'),
         'mapping_type' => 'rel',
       ))
+      ->setBundleMapping(array('types' => array()))
       ->save();
 
     // Get the test image that simpletest provides.
     $image = current($this->drupalGetTestFiles('image'));
 
     // Save a node with the image.
-    $nid = $this->uploadNodeImage($image, $this->fieldName, 'article');
-    $this->node = node_load($nid);
+    $nid = $this->uploadNodeImage($image, $this->fieldName, 'article', $this->randomMachineName());
+    $this->node = Node::load($nid);
     $this->file = file_load($this->node->{$this->fieldName}->target_id);
   }
 
@@ -89,12 +92,12 @@ class ImageFieldAttributesTest extends ImageFieldTestBase {
     // Parse the teaser.
     $parser = new \EasyRdf_Parser_Rdfa();
     $graph = new \EasyRdf_Graph();
-    $base_uri = url('<front>', array('absolute' => TRUE));
+    $base_uri = \Drupal::url('<front>', [], ['absolute' => TRUE]);
     $parser->parse($graph, $html, 'rdfa', $base_uri);
 
     // Construct the node and image URIs for testing.
-    $node_uri = url('node/' . $this->node->id(), array('absolute' => TRUE));
-    $image_uri = entity_load('image_style', 'medium')->buildUrl($this->file->getFileUri());
+    $node_uri = $this->node->url('canonical', ['absolute' => TRUE]);
+    $image_uri = ImageStyle::load('medium')->buildUrl($this->file->getFileUri());
 
     // Test relations from node to image.
     $expected_value = array(

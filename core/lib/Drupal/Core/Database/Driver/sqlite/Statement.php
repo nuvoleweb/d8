@@ -19,7 +19,7 @@ use Drupal\Core\Database\StatementInterface;
  * user-space mock of PDOStatement that buffers all the data and doesn't
  * have those limitations.
  */
-class Statement extends StatementPrefetch implements \Iterator, StatementInterface {
+class Statement extends StatementPrefetch implements StatementInterface {
 
   /**
    * SQLite specific implementation of getStatement().

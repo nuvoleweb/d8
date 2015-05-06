@@ -17,7 +17,8 @@
       function checkboxesSummary(context) {
         var vals = [];
         var $checkboxes = $(context).find('input[type="checkbox"]:checked + label');
-        for (var i = 0, il = $checkboxes.length; i < il; i += 1) {
+        var il = $checkboxes.length;
+        for (var i = 0; i < il; i++) {
           vals.push($($checkboxes[i]).text());
         }
         if (!vals.length) {
@@ -26,10 +27,10 @@
         return vals.join(', ');
       }
 
-      $('#edit-settings-visibility-node-type, #edit-settings-visibility-language, #edit-settings-visibility-user-role').drupalSetSummary(checkboxesSummary);
+      $('#edit-visibility-node-type, #edit-visibility-language, #edit-visibility-user-role').drupalSetSummary(checkboxesSummary);
 
-      $('#edit-settings-visibility-request-path').drupalSetSummary(function (context) {
-        var $pages = $(context).find('textarea[name="settings[visibility][request_path][pages]"]');
+      $('#edit-visibility-request-path').drupalSetSummary(function (context) {
+        var $pages = $(context).find('textarea[name="visibility[request_path][pages]"]');
         if (!$pages.val()) {
           return Drupal.t('Not restricted');
         }
@@ -91,7 +92,7 @@
       };
 
       // Add the behavior to each region select list.
-      $(context).find('select.block-region-select').once('block-region-select', function () {
+      $(context).find('select.block-region-select').once('block-region-select').each(function () {
         $(this).on('change', function (event) {
           // Make our new row and select field.
           var row = $(this).closest('tr');
@@ -99,7 +100,7 @@
           tableDrag.rowObject = new tableDrag.row(row);
 
           // Find the correct region and insert the row as the last in the region.
-          table.find('.region-' + select[0].value + '-message').nextUntil('.region-message').last().before(row);
+          table.find('.region-' + select[0].value + '-message').nextUntil('.region-message').eq(-1).before(row);
 
           // Modify empty regions with added or removed fields.
           checkEmptyRegions(table, row);

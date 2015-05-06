@@ -8,12 +8,12 @@
 namespace Drupal\views_ui;
 
 use Drupal\Component\Utility\SafeMarkup;
-use Drupal\Component\Utility\String;
 use Drupal\Component\Plugin\PluginManagerInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Config\Entity\ConfigEntityListBuilder;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\Core\Url;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -98,7 +98,7 @@ class ViewListBuilder extends ConfigEntityListBuilder {
         ),
         'description' => array(
           'data' => array(
-            '#markup' => String::checkPlain($view->get('description')),
+            '#markup' => SafeMarkup::checkPlain($view->get('description')),
           ),
           'class' => array('views-table-filter-text-source'),
         ),
@@ -149,15 +149,14 @@ class ViewListBuilder extends ConfigEntityListBuilder {
       $operations['duplicate'] = array(
         'title' => $this->t('Duplicate'),
         'weight' => 15,
-      ) + $entity->urlInfo('duplicate-form')->toArray();
+        'url' => $entity->urlInfo('duplicate-form'),
+      );
     }
 
     // Add AJAX functionality to enable/disable operations.
     foreach (array('enable', 'disable') as $op) {
       if (isset($operations[$op])) {
-        $operations[$op]['route_name'] = "entity.view.{$op}";
-        $operations[$op]['route_parameters'] = array('view' => $entity->id());
-
+        $operations[$op]['url'] = $entity->urlInfo($op);
         // Enable and disable operations should use AJAX.
         $operations[$op]['attributes']['class'][] = 'use-ajax';
       }
@@ -174,7 +173,6 @@ class ViewListBuilder extends ConfigEntityListBuilder {
     $list['#type'] = 'container';
     $list['#attributes']['id'] = 'views-entity-list';
 
-    $list['#attached']['css'] = ViewFormBase::getAdminCSS();
     $list['#attached']['library'][] = 'core/drupal.ajax';
     $list['#attached']['library'][] = 'views_ui/views_ui.listing';
 
@@ -187,9 +185,10 @@ class ViewListBuilder extends ConfigEntityListBuilder {
 
     $list['filters']['text'] = array(
       '#type' => 'search',
-      '#title' => $this->t('Search'),
-      '#size' => 30,
-      '#placeholder' => $this->t('Enter view name'),
+      '#title' => $this->t('Filter'),
+      '#title_display' => 'invisible',
+      '#size' => 40,
+      '#placeholder' => $this->t('Filter by view name or description'),
       '#attributes' => array(
         'class' => array('views-filter-text'),
         'data-table' => '.views-listing-table',
@@ -198,8 +197,8 @@ class ViewListBuilder extends ConfigEntityListBuilder {
       ),
     );
 
-    $list['enabled']['heading']['#markup'] = '<h2>' . $this->t('Enabled') . '</h2>';
-    $list['disabled']['heading']['#markup'] = '<h2>' . $this->t('Disabled') . '</h2>';
+    $list['enabled']['heading']['#markup'] = '<h2>' . $this->t('Enabled', array(), array('context' => 'Plural')) . '</h2>';
+    $list['disabled']['heading']['#markup'] = '<h2>' . $this->t('Disabled', array(), array('context' => 'Plural')) . '</h2>';
     foreach (array('enabled', 'disabled') as $status) {
       $list[$status]['#type'] = 'container';
       $list[$status]['#attributes'] = array('class' => array('views-list-section', $status));
@@ -264,10 +263,12 @@ class ViewListBuilder extends ConfigEntityListBuilder {
       if ($display->hasPath()) {
         $path = $display->getPath();
         if ($view->status() && strpos($path, '%') === FALSE) {
-          $all_paths[] = l('/' . $path, $path);
+          // @todo Views should expect and store a leading /. See:
+          //   https://www.drupal.org/node/2423913
+          $all_paths[] = \Drupal::l('/' . $path, Url::fromUserInput('/' . $path));
         }
         else {
-          $all_paths[] = String::checkPlain('/' . $path);
+          $all_paths[] = SafeMarkup::checkPlain('/' . $path);
         }
       }
     }

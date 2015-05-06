@@ -27,15 +27,19 @@ class TelephoneFieldTest extends WebTestBase {
     'telephone'
   );
 
-  protected $instance;
-  protected $web_user;
+  /**
+   * A user with permission to create articles.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $webUser;
 
   protected function setUp() {
     parent::setUp();
 
     $this->drupalCreateContentType(array('type' => 'article'));
-    $this->article_creator = $this->drupalCreateUser(array('create article content', 'edit own article content'));
-    $this->drupalLogin($this->article_creator);
+    $this->webUser = $this->drupalCreateUser(array('create article content', 'edit own article content'));
+    $this->drupalLogin($this->webUser);
   }
 
   // Test fields.
@@ -45,13 +49,13 @@ class TelephoneFieldTest extends WebTestBase {
    */
   function testTelephoneField() {
 
-    // Add the telepone field to the article content type.
+    // Add the telephone field to the article content type.
     entity_create('field_storage_config', array(
-      'name' => 'field_telephone',
+      'field_name' => 'field_telephone',
       'entity_type' => 'node',
       'type' => 'telephone',
     ))->save();
-    entity_create('field_instance_config', array(
+    entity_create('field_config', array(
       'field_name' => 'field_telephone',
       'label' => 'Telephone Number',
       'entity_type' => 'node',
@@ -79,7 +83,7 @@ class TelephoneFieldTest extends WebTestBase {
     $this->assertFieldByName("field_telephone[0][value]", '', 'Widget found.');
     $this->assertRaw('placeholder="123-456-7890"');
 
-    // Test basic entery of telephone field.
+    // Test basic entry of telephone field.
     $edit = array(
       'title[0][value]' => $this->randomMachineName(),
       'field_telephone[0][value]' => "123456789",

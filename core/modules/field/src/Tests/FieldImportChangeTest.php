@@ -7,8 +7,10 @@
 
 namespace Drupal\field\Tests;
 
+use Drupal\field\Entity\FieldConfig;
+
 /**
- * Update field and instances during config change method invocation.
+ * Update field storage and fields during config change method invocation.
  *
  * @group field
  */
@@ -17,36 +19,39 @@ class FieldImportChangeTest extends FieldUnitTestBase {
   /**
    * Modules to enable.
    *
+   * The default configuration provided by field_test_config is imported by
+   * \Drupal\field\Tests\FieldUnitTestBase::setUp() when it installs field
+   * configuration.
+   *
    * @var array
    */
   public static $modules = array('field_test_config');
 
   /**
-   * Tests importing an updated field instance.
+   * Tests importing an updated field.
    */
   function testImportChange() {
-    $field_id = 'field_test_import';
-    $instance_id = "entity_test.entity_test.$field_id";
-    $instance_config_name = "field.instance.$instance_id";
+    $this->installConfig(['field_test_config']);
+    $field_storage_id = 'field_test_import';
+    $field_id = "entity_test.entity_test.$field_storage_id";
+    $field_config_name = "field.field.$field_id";
 
-    // Import default config.
-    $this->installConfig(array('field_test_config'));
     $active = $this->container->get('config.storage');
     $staging = $this->container->get('config.storage.staging');
     $this->copyConfig($active, $staging);
 
-    // Save as files in the the staging directory.
-    $instance = $active->read($instance_config_name);
+    // Save as files in the staging directory.
+    $field = $active->read($field_config_name);
     $new_label = 'Test update import field';
-    $instance['label'] = $new_label;
-    $staging->write($instance_config_name, $instance);
+    $field['label'] = $new_label;
+    $staging->write($field_config_name, $field);
 
     // Import the content of the staging directory.
     $this->configImporter()->import();
 
     // Check that the updated config was correctly imported.
-    $instance = entity_load('field_instance_config', $instance_id);
-    $this->assertEqual($instance->getLabel(), $new_label, 'Instance label updated');
+    $field = FieldConfig::load($field_id);
+    $this->assertEqual($field->getLabel(), $new_label, 'field label updated');
   }
 }
 

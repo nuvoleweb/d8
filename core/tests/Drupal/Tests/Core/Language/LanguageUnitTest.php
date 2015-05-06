@@ -18,7 +18,21 @@ use Drupal\Tests\UnitTestCase;
 class LanguageUnitTest extends UnitTestCase {
 
   /**
-   * @covers ::getName()
+   * @covers ::__construct
+   */
+  public function testConstruct() {
+    $name = $this->randomMachineName();
+    $language_code = $this->randomMachineName(2);
+    $uuid = $this->randomMachineName();
+    $language = new Language(array('id' => $language_code, 'name' => $name, 'uuid' => $uuid));
+    // Test that nonexistent properties are not added to the language object.
+    $this->assertTrue(property_exists($language, 'id'));
+    $this->assertTrue(property_exists($language, 'name'));
+    $this->assertFalse(property_exists($language, 'uuid'));
+  }
+
+  /**
+   * @covers ::getName
    */
   public function testGetName() {
     $name = $this->randomMachineName();
@@ -28,7 +42,7 @@ class LanguageUnitTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::getId()
+   * @covers ::getId
    */
   public function testGetLangcode() {
     $language_code = $this->randomMachineName(2);
@@ -37,7 +51,7 @@ class LanguageUnitTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::getDirection()
+   * @covers ::getDirection
    */
   public function testGetDirection() {
     $language_code = $this->randomMachineName(2);
@@ -46,18 +60,35 @@ class LanguageUnitTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::isDefault()
+   * @covers ::isDefault
    */
   public function testIsDefault() {
-    $language_code = $this->randomMachineName(2);
-    $language = new Language(array('id' => $language_code, 'default' => TRUE));
+    $language_default = $this->getMockBuilder('Drupal\Core\Language\LanguageDefault')->disableOriginalConstructor()->getMock();
+    $container = $this->getMock('Symfony\Component\DependencyInjection\ContainerInterface');
+    $container->expects($this->any())
+      ->method('get')
+      ->with('language.default')
+      ->will($this->returnValue($language_default));
+    \Drupal::setContainer($container);
+
+    $language = new Language(array('id' => $this->randomMachineName(2)));
+    // Set up the LanguageDefault to return different default languages on
+    // consecutive calls.
+    $language_default->expects($this->any())
+      ->method('get')
+      ->willReturnOnConsecutiveCalls(
+        $language,
+        new Language(array('id' => $this->randomMachineName(2)))
+      );
+
     $this->assertTrue($language->isDefault());
+    $this->assertFalse($language->isDefault());
   }
 
   /**
    * Tests sorting an array of language objects.
    *
-   * @covers ::sort()
+   * @covers ::sort
    *
    * @dataProvider providerTestSortArrayOfLanguages
    *

@@ -40,7 +40,7 @@ use Drupal\Component\Utility\SafeMarkup;
  * @endcode
  *
  * The attribute keys and values are automatically sanitized for output with
- * \Drupal\Component\Utility\String::checkPlain().
+ * \Drupal\Component\Utility\SafeMarkup::checkPlain().
  */
 class Attribute implements \ArrayAccess, \IteratorAggregate {
 
@@ -150,14 +150,51 @@ class Attribute implements \ArrayAccess, \IteratorAggregate {
       if (isset($this->storage['class']) && $this->storage['class'] instanceOf AttributeArray) {
         // Merge the values passed in from the class value array.
         $classes = array_merge($this->storage['class']->value(), $classes);
-        // Filter out any duplicate values.
-        $classes = array_unique($classes);
         $this->storage['class']->exchangeArray($classes);
       }
       else {
-        // Filter out any duplicate values.
-        $classes = array_unique($classes);
         $this->offsetSet('class', $classes);
+      }
+    }
+
+    return $this;
+  }
+
+  /**
+   * Sets values for an attribute key.
+   *
+   * @param string $attribute
+   *   Name of the attribute.
+   * @param string|array $value
+   *   Value(s) to set for the given attribute key.
+   *
+   * @return $this
+   */
+  public function setAttribute($attribute, $value) {
+    $this->offsetSet($attribute, $value);
+
+    return $this;
+  }
+
+  /**
+   * Removes an attribute from an Attribute object.
+   *
+   * @param string|array ...
+   *   Attributes to remove from the attribute array.
+   *
+   * @return $this
+   */
+  public function removeAttribute() {
+    $args = func_get_args();
+    foreach ($args as $arg) {
+      // Support arrays or multiple arguments.
+      if (is_array($arg)) {
+        foreach ($arg as $value) {
+          unset($this->storage[$value]);
+        }
+      }
+      else {
+        unset($this->storage[$arg]);
       }
     }
 
@@ -184,11 +221,30 @@ class Attribute implements \ArrayAccess, \IteratorAggregate {
         $classes = array_merge($classes, (array) $arg);
       }
 
-      // Remove the values passed in from the value array.
-      $classes = array_diff($this->storage['class']->value(), $classes);
+      // Remove the values passed in from the value array. Use array_values() to
+      // ensure that the array index remains sequential.
+      $classes = array_values(array_diff($this->storage['class']->value(), $classes));
       $this->storage['class']->exchangeArray($classes);
     }
     return $this;
+  }
+
+  /**
+   * Checks if the class array has the given CSS class.
+   *
+   * @param string $class
+   *   The CSS class to check for.
+   *
+   * @return bool
+   *   Returns TRUE if the class exists, or FALSE otherwise.
+   */
+  public function hasClass($class) {
+    if (isset($this->storage['class']) && $this->storage['class'] instanceOf AttributeArray) {
+      return in_array($class, $this->storage['class']->value());
+    }
+    else {
+      return FALSE;
+    }
   }
 
   /**

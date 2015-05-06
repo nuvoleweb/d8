@@ -51,7 +51,7 @@ class TwigNodeTrans extends \Twig_Node {
     }
 
     // Start writing with the function to be called.
-    $compiler->write('echo ' . (empty($plural) ? 't' : 'format_plural') . '(');
+    $compiler->write('echo ' . (empty($plural) ? 't' : '\Drupal::translation()->formatPlural') . '(');
 
     // Move the count to the beginning of the parameters list.
     if (!empty($plural)) {
@@ -136,7 +136,7 @@ class TwigNodeTrans extends \Twig_Node {
 
           $args = $n;
 
-          // Support twig_render_var function in chain.
+          // Support TwigExtension->renderVar() function in chain.
           if ($args instanceof \Twig_Node_Expression_Function) {
             $args = $n->getNode('arguments')->getNode(0);
           }

@@ -9,7 +9,7 @@ namespace Drupal\config\Tests;
 
 use Drupal\Core\Config\TypedConfigManagerInterface;
 use Drupal\Core\Config\Schema\SchemaCheckTrait;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 
 /**
  * Provides a class for checking configuration schema.
@@ -33,20 +33,32 @@ trait SchemaCheckTestTrait {
     if ($errors === FALSE) {
       // @todo Since the use of this trait is under TestBase, it works.
       //  Can be fixed as part of https://drupal.org/node/2260053.
-      $this->fail(String::format('No schema for !config_name', array('!config_name' => $config_name)));
+      $this->fail(SafeMarkup::format('No schema for !config_name', array('!config_name' => $config_name)));
       return;
     }
     elseif ($errors === TRUE) {
       // @todo Since the use of this trait is under TestBase, it works.
       //  Can be fixed as part of https://drupal.org/node/2260053.
-      $this->pass(String::format('Schema found for !config_name and values comply with schema.', array('!config_name' => $config_name)));
+      $this->pass(SafeMarkup::format('Schema found for !config_name and values comply with schema.', array('!config_name' => $config_name)));
     }
     else {
       foreach ($errors as $key => $error) {
         // @todo Since the use of this trait is under TestBase, it works.
         //  Can be fixed as part of https://drupal.org/node/2260053.
-        $this->fail($key . ': ' . $error);
+        $this->fail(SafeMarkup::format('Schema key @key failed with: @error', array('@key' => $key, '@error' => $error)));
       }
     }
   }
+
+  /**
+   * Asserts configuration, specified by name, has a valid schema.
+   *
+   * @param string $config_name
+   *   The configuration name.
+   */
+  public function assertConfigSchemaByName($config_name) {
+    $config = $this->config($config_name);
+    $this->assertConfigSchema(\Drupal::service('config.typed'), $config->getName(), $config->get());
+  }
+
 }

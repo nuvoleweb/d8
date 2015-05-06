@@ -7,7 +7,7 @@
 
 namespace Drupal\user\Tests\Views;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\user\Tests\Views\UserUnitTestBase;
 use Drupal\views\Views;
 
@@ -80,15 +80,15 @@ class HandlerFilterPermissionTest extends UserUnitTestBase {
     // Test the value options.
     $value_options = $view->filter['permission']->getValueOptions();
 
-    $permisssion_by_module = [];
+    $permission_by_module = [];
     $permissions = \Drupal::service('user.permissions')->getPermissions();
     foreach ($permissions as $name => $permission) {
-      $permisssion_by_module[$permission['provider']][$name] = $permission;
+      $permission_by_module[$permission['provider']][$name] = $permission;
     }
     foreach (array('system' => 'System', 'user' => 'User') as $module => $title) {
       $expected = array_map(function ($permission) {
-        return String::checkPlain(strip_tags($permission['title']));
-      }, $permisssion_by_module[$module]);
+        return SafeMarkup::checkPlain(strip_tags($permission['title']));
+      }, $permission_by_module[$module]);
 
       $this->assertEqual($expected, $value_options[$title], 'Ensure the all permissions are available');
     }

@@ -13,7 +13,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\image\ConfigurableImageEffectInterface;
 use Drupal\image\ImageStyleInterface;
 use Drupal\Component\Plugin\Exception\PluginNotFoundException;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -61,7 +61,7 @@ abstract class ImageEffectFormBase extends FormBase {
       $this->imageEffect = $this->prepareImageEffect($image_effect);
     }
     catch (PluginNotFoundException $e) {
-      throw new NotFoundHttpException(String::format("Invalid effect id: '@id'.", array('@id' => $image_effect)));
+      throw new NotFoundHttpException(SafeMarkup::format("Invalid effect id: '@id'.", array('@id' => $image_effect)));
     }
     $request = $this->getRequest();
 
@@ -69,7 +69,7 @@ abstract class ImageEffectFormBase extends FormBase {
       throw new NotFoundHttpException();
     }
 
-    $form['#attached']['css'][drupal_get_path('module', 'image') . '/css/image.admin.css'] = array();
+    $form['#attached']['library'][] = 'image/admin';
     $form['uuid'] = array(
       '#type' => 'value',
       '#value' => $this->imageEffect->getUuid(),
@@ -96,7 +96,9 @@ abstract class ImageEffectFormBase extends FormBase {
     $form['actions']['cancel'] = array(
       '#type' => 'link',
       '#title' => $this->t('Cancel'),
-    ) + $this->imageStyle->urlInfo('edit-form')->toRenderArray();
+      '#url' => $this->imageStyle->urlInfo('edit-form'),
+      '#attributes' => ['class' => ['button']],
+    );
     return $form;
   }
 

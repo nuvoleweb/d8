@@ -7,7 +7,7 @@
 
 namespace Drupal\system\Tests\Condition;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\simpletest\KernelTestBase;
 
 /**
@@ -23,6 +23,14 @@ class CurrentThemeConditionTest extends KernelTestBase {
   public static $modules = array('system', 'theme_test');
 
   /**
+   * {@inheritdoc}
+   */
+  protected function setUp() {
+    parent::setUp();
+    $this->installSchema('system', array('router'));
+  }
+
+  /**
    * Tests the current theme condition.
    */
   public function testCurrentTheme() {
@@ -36,15 +44,17 @@ class CurrentThemeConditionTest extends KernelTestBase {
     $condition_negated = $manager->createInstance('current_theme');
     $condition_negated->setConfiguration(array('theme' => 'test_theme', 'negate' => TRUE));
 
-    $this->assertEqual($condition->summary(), String::format('The current theme is @theme', array('@theme' => 'test_theme')));
-    $this->assertEqual($condition_negated->summary(), String::format('The current theme is not @theme', array('@theme' => 'test_theme')));
+    $this->assertEqual($condition->summary(), SafeMarkup::format('The current theme is @theme', array('@theme' => 'test_theme')));
+    $this->assertEqual($condition_negated->summary(), SafeMarkup::format('The current theme is not @theme', array('@theme' => 'test_theme')));
 
     // The expected theme has not been set up yet.
     $this->assertFalse($condition->execute());
     $this->assertTrue($condition_negated->execute());
 
     // Set the expected theme to be used.
-    \Drupal::config('system.theme')->set('default', 'test_theme')->save();
+    $this->config('system.theme')->set('default', 'test_theme')->save();
+    \Drupal::theme()->resetActiveTheme();
+
     $this->assertTrue($condition->execute());
     $this->assertFalse($condition_negated->execute());
   }

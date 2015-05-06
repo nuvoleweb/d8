@@ -7,7 +7,7 @@
 
 namespace Drupal\Tests\user\Unit\Views\Argument;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\DependencyInjection\ContainerBuilder;
 use Drupal\Tests\UnitTestCase;
 use Drupal\user\Entity\Role;
@@ -69,7 +69,7 @@ class RolesRidTest extends UnitTestCase {
     $container->set('entity.manager', $entity_manager);
     \Drupal::setContainer($container);
 
-    $roles_rid_argument = new RolesRid(array(), 'users_roles_rid', array(), $entity_manager);
+    $roles_rid_argument = new RolesRid(array(), 'user__roles_rid', array(), $entity_manager);
 
     $roles_rid_argument->value = array();
     $titles = $roles_rid_argument->title_query();
@@ -81,7 +81,7 @@ class RolesRidTest extends UnitTestCase {
 
     $roles_rid_argument->value = array('test_rid_1', 'test_rid_2');
     $titles = $roles_rid_argument->title_query();
-    $this->assertEquals(array('test rid 1', String::checkPlain('test <strong>rid 2</strong>')), $titles);
+    $this->assertEquals(array('test rid 1', SafeMarkup::checkPlain('test <strong>rid 2</strong>')), $titles);
   }
 
 }

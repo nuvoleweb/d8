@@ -8,6 +8,7 @@
 namespace Drupal\system\Tests\ParamConverter;
 
 use Drupal\simpletest\WebTestBase;
+use Drupal\language\Entity\ConfigurableLanguage;
 
 /**
  * Tests upcasting of url arguments to entities.
@@ -16,13 +17,13 @@ use Drupal\simpletest\WebTestBase;
  */
 class UpcastingTest extends WebTestBase {
 
-  public static $modules = array('paramconverter_test', 'node');
+  public static $modules = array('paramconverter_test', 'node', 'language');
 
   /**
    * Confirms that all parameters are converted as expected.
    *
-   * All of these requests end up being proccessed by a controller with this
-   * the signature: f($user, $node, $foo) returning either values or labels
+   * All of these requests end up being processed by a controller with the
+   * signature: f($user, $node, $foo) returning either values or labels
    * like "user: Dries, node: First post, foo: bar"
    *
    * The tests shuffle the parameters around an checks if the right thing is
@@ -59,4 +60,26 @@ class UpcastingTest extends WebTestBase {
     $this->drupalGet("paramconverter_test/node/" . $node->id() . "/set/parent/" . $parent->id());
     $this->assertRaw("Setting '" . $parent->getTitle() . "' as parent of '" . $node->getTitle() . "'.");
   }
+
+  /**
+   * Confirms entity is shown in user's language by default.
+   */
+  public function testEntityLanguage() {
+    $language = ConfigurableLanguage::createFromLangcode('de');
+    $language->save();
+    language_negotiation_url_prefixes_save(array('de' => 'de'));
+
+    // The container must be recreated after adding a new language.
+    $this->rebuildContainer();
+
+    $node = $this->drupalCreateNode(array('title' => 'English label'));
+    $translation = $node->addTranslation('de');
+    $translation->setTitle('Deutscher Titel')->save();
+
+    $this->drupalGet("/paramconverter_test/node/" . $node->id() . "/test_language");
+    $this->assertRaw("English label");
+    $this->drupalGet("paramconverter_test/node/" . $node->id() . "/test_language", array('language' => $language));
+    $this->assertRaw("Deutscher Titel");
+  }
+
 }

@@ -7,6 +7,7 @@
 
 namespace Drupal\statistics\Plugin\Block;
 
+use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Block\BlockBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Session\AccountInterface;
@@ -57,22 +58,23 @@ class StatisticsPopularBlock extends BlockBase {
    * {@inheritdoc}
    */
   protected function blockAccess(AccountInterface $account) {
+    $access = AccessResult::allowedIfHasPermission($account, 'access content');
     if ($account->hasPermission('access content')) {
       $daytop = $this->configuration['top_day_num'];
-      if (!$daytop || !($result = statistics_title_list('daycount', $daytop)) || !($this->day_list = node_title_list($result, t("Today's:")))) {
-        return FALSE;
+      if (!$daytop || !($result = statistics_title_list('daycount', $daytop)) || !($this->day_list = node_title_list($result, $this->t("Today's:")))) {
+        return AccessResult::forbidden()->inheritCacheability($access);
       }
       $alltimetop = $this->configuration['top_all_num'];
-      if (!$alltimetop || !($result = statistics_title_list('totalcount', $alltimetop)) || !($this->all_time_list = node_title_list($result, t('All time:')))) {
-        return FALSE;
+      if (!$alltimetop || !($result = statistics_title_list('totalcount', $alltimetop)) || !($this->all_time_list = node_title_list($result, $this->t('All time:')))) {
+        return AccessResult::forbidden()->inheritCacheability($access);
       }
       $lasttop = $this->configuration['top_last_num'];
-      if (!$lasttop || !($result = statistics_title_list('timestamp', $lasttop)) || !($this->last_list = node_title_list($result, t('Last viewed:')))) {
-        return FALSE;
+      if (!$lasttop || !($result = statistics_title_list('timestamp', $lasttop)) || !($this->last_list = node_title_list($result, $this->t('Last viewed:')))) {
+        return AccessResult::forbidden()->inheritCacheability($access);
       }
-      return TRUE;
+      return $access;
     }
-    return FALSE;
+    return AccessResult::forbidden()->inheritCacheability($access);
   }
 
   /**
@@ -81,27 +83,27 @@ class StatisticsPopularBlock extends BlockBase {
   public function blockForm($form, FormStateInterface $form_state) {
     // Popular content block settings.
     $numbers = array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, 40);
-    $numbers = array('0' => t('Disabled')) + array_combine($numbers, $numbers);
+    $numbers = array('0' => $this->t('Disabled')) + array_combine($numbers, $numbers);
     $form['statistics_block_top_day_num'] = array(
      '#type' => 'select',
-     '#title' => t("Number of day's top views to display"),
+     '#title' => $this->t("Number of day's top views to display"),
      '#default_value' => $this->configuration['top_day_num'],
      '#options' => $numbers,
-     '#description' => t('How many content items to display in "day" list.'),
+     '#description' => $this->t('How many content items to display in "day" list.'),
     );
     $form['statistics_block_top_all_num'] = array(
       '#type' => 'select',
-      '#title' => t('Number of all time views to display'),
+      '#title' => $this->t('Number of all time views to display'),
       '#default_value' => $this->configuration['top_all_num'],
       '#options' => $numbers,
-      '#description' => t('How many content items to display in "all time" list.'),
+      '#description' => $this->t('How many content items to display in "all time" list.'),
     );
     $form['statistics_block_top_last_num'] = array(
       '#type' => 'select',
-      '#title' => t('Number of most recent views to display'),
+      '#title' => $this->t('Number of most recent views to display'),
       '#default_value' => $this->configuration['top_last_num'],
       '#options' => $numbers,
-      '#description' => t('How many content items to display in "recently viewed" list.'),
+      '#description' => $this->t('How many content items to display in "recently viewed" list.'),
     );
     return $form;
   }

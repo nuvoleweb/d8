@@ -9,18 +9,19 @@
   Drupal.behaviors.password = {
     attach: function (context, settings) {
       var translate = settings.password;
-      $(context).find('input.password-field').once('password', function () {
+      $(context).find('input.password-field').once('password').each(function () {
         var passwordInput = $(this);
         var innerWrapper = $(this).parent();
         var outerWrapper = $(this).parent().parent();
+        var passwordDescription;
 
         // Add identifying class to password element parent.
         innerWrapper.addClass('password-parent');
 
         // Add the password confirmation layer.
-        outerWrapper.find('input.password-confirm').parent().append('<div class="password-confirm">' + translate.confirmTitle + ' <span></span></div>').addClass('confirm-parent');
+        outerWrapper.find('input.password-confirm').parent().append('<div class="password-confirm-match">' + translate.confirmTitle + ' <span></span></div>').addClass('confirm-parent');
         var confirmInput = outerWrapper.find('input.password-confirm');
-        var confirmResult = outerWrapper.find('div.password-confirm');
+        var confirmResult = outerWrapper.find('div.password-confirm-match');
         var confirmChild = confirmResult.find('span');
 
         // If the password strength indicator is enabled, add its markup.
@@ -28,7 +29,7 @@
           var passwordMeter = '<div class="password-strength"><div class="password-strength__meter"><div class="password-strength__indicator"></div></div><div class="password-strength__title">' + translate.strengthTitle + ' </div><div class="password-strength__text" aria-live="assertive"></div></div>';
           confirmInput.parent().after('<div class="password-suggestions description"></div>');
           innerWrapper.append(passwordMeter);
-          var passwordDescription = outerWrapper.find('div.password-suggestions').hide();
+          passwordDescription = outerWrapper.find('div.password-suggestions').hide();
         }
 
         // Check that password and confirmation inputs match.
@@ -68,10 +69,10 @@
           // Check the value in the confirm input and show results.
           if (confirmInput.val()) {
             passwordCheckMatch(confirmInput.val());
-            confirmResult.css({ visibility: 'visible' });
+            confirmResult.css({visibility: 'visible'});
           }
           else {
-            confirmResult.css({ visibility: 'hidden' });
+            confirmResult.css({visibility: 'hidden'});
           }
         };
 
@@ -88,7 +89,11 @@
    * Returns the estimated strength and the relevant output message.
    */
   Drupal.evaluatePasswordStrength = function (password, translate) {
-    var indicatorText, indicatorClass, weaknesses = 0, strength = 100, msg = [];
+    var indicatorText;
+    var indicatorClass;
+    var weaknesses = 0;
+    var strength = 100;
+    var msg = [];
 
     var hasLowercase = /[a-z]+/.test(password);
     var hasUppercase = /[A-Z]+/.test(password);
@@ -170,29 +175,8 @@
 
     // Assemble the final message.
     msg = translate.hasWeaknesses + '<ul><li>' + msg.join('</li><li>') + '</li></ul>';
-    return { strength: strength, message: msg, indicatorText: indicatorText, indicatorClass: indicatorClass };
+    return {strength: strength, message: msg, indicatorText: indicatorText, indicatorClass: indicatorClass};
 
-  };
-
-  /**
-   * Field instance settings screen: force the 'Display on registration form'
-   * checkbox checked whenever 'Required' is checked.
-   */
-  Drupal.behaviors.fieldUserRegistration = {
-    attach: function (context, settings) {
-      var $checkbox = $('form#field-ui-field-edit-form input#edit-instance-settings-user-register-form');
-
-      if ($checkbox.length) {
-        $(context).find('input#edit-instance-required').once('user-register-form-checkbox', function () {
-          $(this).on('change', function (e) {
-            if ($(this).prop('checked')) {
-              $checkbox.prop('checked', true);
-            }
-          });
-        });
-
-      }
-    }
   };
 
 })(jQuery);

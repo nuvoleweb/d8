@@ -7,6 +7,8 @@
 
 namespace Drupal\system\Tests\Ajax;
 
+use Drupal\Core\Url;
+
 /**
  * Performs tests on opening and manipulating dialogs via AJAX commands.
  *
@@ -30,7 +32,7 @@ class DialogTest extends AjaxTestBase {
     $this->drupalGet('ajax-test/dialog');
 
     // Set up variables for this test.
-    $dialog_renderable = ajax_test_dialog_contents();
+    $dialog_renderable = \Drupal\ajax_test\Controller\AjaxTestController::dialogContents();
     $dialog_contents = drupal_render($dialog_renderable);
     $modal_expected_response = array(
       'command' => 'openDialog',
@@ -91,8 +93,8 @@ class DialogTest extends AjaxTestBase {
     $this->assertRaw($dialog_contents, 'Non-JS modal dialog page present.');
 
     // Emulate going to the JS version of the page and check the JSON response.
-    $ajax_result = $this->drupalGetAJAX('ajax-test/dialog-contents', array(), array('Accept: application/vnd.drupal-modal'));
-    $this->assertEqual($modal_expected_response, $ajax_result[1], 'Modal dialog JSON response matches.');
+    $ajax_result = $this->drupalGetAjax('ajax-test/dialog-contents', array(), array('Accept: application/vnd.drupal-modal'));
+    $this->assertEqual($modal_expected_response, $ajax_result[3], 'Modal dialog JSON response matches.');
 
     // Check that requesting a "normal" dialog without JS goes to a page.
     $this->drupalGet('ajax-test/dialog-contents');
@@ -125,7 +127,7 @@ class DialogTest extends AjaxTestBase {
 
     // Emulate closing the dialog via an AJAX request. There is no non-JS
     // version of this test.
-    $ajax_result = $this->drupalGetAJAX('ajax-test/dialog-close');
+    $ajax_result = $this->drupalGetAjax('ajax-test/dialog-close');
     $this->assertEqual($close_expected_response, $ajax_result[0], 'Close dialog JSON response matches.');
 
     // Test submitting via a POST request through the button for modals. This
@@ -134,9 +136,13 @@ class DialogTest extends AjaxTestBase {
     $ajax_result = $this->drupalPostAjaxForm('ajax-test/dialog', array(), 'button1');
 
     // Check that CSS and JavaScript are "added" to the page dynamically.
-    $this->assertTrue(in_array('jquery.ui.dialog.css', array_keys($ajax_result[0]['settings']['ajaxPageState']['css'])), 'jQuery UI dialog CSS added to the page.');
-    $this->assertTrue(in_array('core/assets/vendor/jquery.ui/ui/jquery.ui.dialog.js', array_keys($ajax_result[0]['settings']['ajaxPageState']['js'])), 'jQuery UI dialog JS added to the page.');
-    $this->assertTrue(in_array('core/misc/dialog/dialog.ajax.js', array_keys($ajax_result[0]['settings']['ajaxPageState']['js'])), 'Drupal dialog JS added to the page.');
+    $this->assertTrue(in_array('core/drupal.dialog.ajax', explode(',', $ajax_result[0]['settings']['ajaxPageState']['libraries'])), 'core/drupal.dialog.ajax library is added to the page.');
+    $dialog_css_exists = strpos($ajax_result[1]['data'], 'dialog.css') !== FALSE;
+    $this->assertTrue($dialog_css_exists, 'jQuery UI dialog CSS added to the page.');
+    $dialog_js_exists = strpos($ajax_result[2]['data'], 'dialog-min.js') !== FALSE;
+    $this->assertTrue($dialog_js_exists, 'jQuery UI dialog JS added to the page.');
+    $dialog_js_exists = strpos($ajax_result[2]['data'], 'dialog.ajax.js') !== FALSE;
+    $this->assertTrue($dialog_js_exists, 'Drupal dialog JS added to the page.');
 
     // Check that the response matches the expected value.
     $this->assertEqual($modal_expected_response, $ajax_result[3], 'POST request modal dialog JSON response matches.');
@@ -153,13 +159,26 @@ class DialogTest extends AjaxTestBase {
     $this->assertTrue(!empty($form), 'Non-JS form page present.');
 
     // Emulate going to the JS version of the form and check the JSON response.
-    $ajax_result = $this->drupalGetAJAX('ajax-test/dialog-form', array(), array('Accept: application/vnd.drupal-modal'));
-    $this->drupalSetContent($ajax_result[1]['data']);
+    $ajax_result = $this->drupalGetAjax('ajax-test/dialog-form', array(), array('Accept: application/vnd.drupal-modal'));
+    $expected_ajax_settings = [
+      'edit-preview' => [
+        'callback' => '::preview',
+        'event' => 'click',
+        'url' => Url::fromRoute('system.ajax')->toString(),
+        'accepts' => 'application/vnd.drupal-ajax',
+        'submit' => [
+          '_triggering_element_name' => 'op',
+          '_triggering_element_value' => 'Preview',
+        ],
+      ],
+    ];
+    $this->assertEqual($expected_ajax_settings, $ajax_result[0]['settings']['ajax']);
+    $this->setRawContent($ajax_result[3]['data']);
     // Remove the data, the form build id and token will never match.
-    unset($ajax_result[1]['data']);
+    unset($ajax_result[3]['data']);
     $form = $this->xpath("//form[@id='ajax-test-form']");
     $this->assertTrue(!empty($form), 'Modal dialog JSON contains form.');
-    $this->assertEqual($form_expected_response, $ajax_result[1]);
+    $this->assertEqual($form_expected_response, $ajax_result[3]);
 
     // Check that requesting an entity form dialog without JS goes to a page.
     $this->drupalGet('admin/structure/contact/add');
@@ -169,13 +188,13 @@ class DialogTest extends AjaxTestBase {
     $this->assertTrue(!empty($form), 'Non-JS entity form page present.');
 
     // Emulate going to the JS version of the form and check the JSON response.
-    $ajax_result = $this->drupalGetAJAX('admin/structure/contact/add', array(), array('Accept: application/vnd.drupal-modal'));
-    $this->drupalSetContent($ajax_result[1]['data']);
+    $ajax_result = $this->drupalGetAjax('admin/structure/contact/add', array(), array('Accept: application/vnd.drupal-modal'));
+    $this->setRawContent($ajax_result[3]['data']);
     // Remove the data, the form build id and token will never match.
-    unset($ajax_result[1]['data']);
+    unset($ajax_result[3]['data']);
     $form = $this->xpath("//form[@id='contact-form-add-form']");
     $this->assertTrue(!empty($form), 'Modal dialog JSON contains entity form.');
-    $this->assertEqual($entity_form_expected_response, $ajax_result[1]);
+    $this->assertEqual($entity_form_expected_response, $ajax_result[3]);
   }
 
 }

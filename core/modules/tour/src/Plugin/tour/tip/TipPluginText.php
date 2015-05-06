@@ -7,7 +7,8 @@
 
 namespace Drupal\tour\Plugin\tour\tip;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\Html;
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Component\Utility\Xss;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Utility\Token;
@@ -78,7 +79,7 @@ class TipPluginText extends TipPluginBase implements ContainerFactoryPluginInter
   public function getAriaId() {
     static $id;
     if (!isset($id)) {
-      $id = drupal_html_id($this->get('id'));
+      $id = Html::getUniqueId($this->get('id'));
     }
     return $id;
   }
@@ -104,7 +105,7 @@ class TipPluginText extends TipPluginBase implements ContainerFactoryPluginInter
   }
 
   /**
-   * Overrides \Drupal\tour\TipPluginBase::getAttributes().
+   * {@inheritdoc}
    */
   public function getAttributes() {
     $attributes = parent::getAttributes();
@@ -117,10 +118,10 @@ class TipPluginText extends TipPluginBase implements ContainerFactoryPluginInter
   }
 
   /**
-   * Implements \Drupal\tour\TipPluginInterface::getOutput().
+   * {@inheritdoc}
    */
   public function getOutput() {
-    $output = '<h2 class="tour-tip-label" id="tour-tip-' . $this->getAriaId() . '-label">' . String::checkPlain($this->getLabel()) . '</h2>';
+    $output = '<h2 class="tour-tip-label" id="tour-tip-' . $this->getAriaId() . '-label">' . SafeMarkup::checkPlain($this->getLabel()) . '</h2>';
     $output .= '<p class="tour-tip-body" id="tour-tip-' . $this->getAriaId() . '-contents">' . Xss::filterAdmin($this->token->replace($this->getBody())) . '</p>';
     return array('#markup' => $output);
   }

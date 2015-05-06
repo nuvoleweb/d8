@@ -7,7 +7,9 @@
 
 namespace Drupal\Core\Utility;
 
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Cache\CacheBackendInterface;
+use Drupal\Core\Cache\CacheTagsInvalidatorInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Language\LanguageInterface;
 use Drupal\Core\Language\LanguageManagerInterface;
@@ -37,8 +39,8 @@ use Drupal\Core\Language\LanguageManagerInterface;
  * @code
  * // Load a node and a user, then replace tokens in the text.
  * $text = 'On [date:short], [user:name] read [node:title].';
- * $node = node_load(1);
- * $user = user_load(1);
+ * $node = Node::load(1);
+ * $user = User::load(1);
  *
  * // [date:...] tokens use the current date automatically.
  * $data = array('node' => $node, 'user' => $user);
@@ -96,6 +98,13 @@ class Token {
   protected $moduleHandler;
 
   /**
+   * The cache tags invalidator.
+   *
+   * @var \Drupal\Core\Cache\CacheTagsInvalidatorInterface
+   */
+  protected $cacheTagsInvalidator;
+
+  /**
    * Constructs a new class instance.
    *
    * @param \Drupal\Core\Extension\ModuleHandlerInterface $module_handler
@@ -104,11 +113,14 @@ class Token {
    *   The token cache.
    * @param \Drupal\Core\Language\LanguageManagerInterface $language_manager
    *   The language manager.
+   * @param \Drupal\Core\Cache\CacheTagsInvalidatorInterface $cache_tags_invalidator
+   *   The cache tags invalidator.
    */
-  public function __construct(ModuleHandlerInterface $module_handler, CacheBackendInterface $cache, LanguageManagerInterface $language_manager) {
+  public function __construct(ModuleHandlerInterface $module_handler, CacheBackendInterface $cache, LanguageManagerInterface $language_manager, CacheTagsInvalidatorInterface $cache_tags_invalidator) {
     $this->cache = $cache;
     $this->languageManager = $language_manager;
     $this->moduleHandler = $module_handler;
+    $this->cacheTagsInvalidator = $cache_tags_invalidator;
   }
 
   /**
@@ -138,7 +150,7 @@ class Token {
    *     display to a web browser. Defaults to TRUE. Developers who set this
    *     option to FALSE assume responsibility for running
    *     \Drupal\Component\Utility\Xss::filter(),
-   *     \Drupal\Component\Utility\String::checkPlain() or other appropriate
+   *     \Drupal\Component\Utility\SafeMarkup::checkPlain() or other appropriate
    *     scrubbing functions before displaying data to users.
    *
    * @return string
@@ -185,9 +197,9 @@ class Token {
     // $type may not contain : or whitespace characters, but $name may.
     preg_match_all('/
       \[             # [ - pattern start
-      ([^\s\[\]:]*)  # match $type not containing whitespace : [ or ]
+      ([^\s\[\]:]+)  # match $type not containing whitespace : [ or ]
       :              # : - separator
-      ([^\[\]]*)     # match $name not containing [ or ]
+      ([^\[\]]+)     # match $name not containing [ or ]
       \]             # ] - pattern end
       /x', $text, $matches);
 
@@ -231,7 +243,7 @@ class Token {
    *   - sanitize: A boolean flag indicating that tokens should be sanitized for
    *     display to a web browser. Developers who set this option to FALSE assume
    *     responsibility for running \Drupal\Component\Utility\Xss::filter(),
-   *     \Drupal\Component\Utility\String::checkPlain() or other appropriate
+   *     \Drupal\Component\Utility\SafeMarkup::checkPlain() or other appropriate
    *     scrubbing functions before displaying data to users.
    *
    * @return array
@@ -311,7 +323,7 @@ class Token {
    */
   public function getInfo() {
     if (is_null($this->tokenInfo)) {
-      $cache_id = 'token_info:' . $this->languageManager->getCurrentLanguage(LanguageInterface::TYPE_CONTENT)->id;
+      $cache_id = 'token_info:' . $this->languageManager->getCurrentLanguage(LanguageInterface::TYPE_CONTENT)->getId();
       $cache = $this->cache->get($cache_id);
       if ($cache) {
         $this->tokenInfo = $cache->data;
@@ -320,7 +332,7 @@ class Token {
         $this->tokenInfo = $this->moduleHandler->invokeAll('token_info');
         $this->moduleHandler->alter('token_info', $this->tokenInfo);
         $this->cache->set($cache_id, $this->tokenInfo, CacheBackendInterface::CACHE_PERMANENT, array(
-          static::TOKEN_INFO_CACHE_TAG => TRUE,
+          static::TOKEN_INFO_CACHE_TAG,
         ));
       }
     }
@@ -346,8 +358,6 @@ class Token {
    */
   public function resetInfo() {
     $this->tokenInfo = NULL;
-    $this->cache->deleteTags(array(
-      static::TOKEN_INFO_CACHE_TAG => TRUE,
-    ));
+    $this->cacheTagsInvalidator->invalidateTags([static::TOKEN_INFO_CACHE_TAG]);
   }
 }
