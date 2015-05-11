@@ -1,0 +1,12 @@
+uuid: 516b0be9-41a8-4115-b304-4bb9be7dd1ee
+name: 'My personal Blog'
+mail: info@example.com
+slogan: ''
+page:
+  403: ''
+  404: ''
+  front: node
+admin_compact_mode: false
+weight_select_max: 100
+langcode: en
+default_langcode: en

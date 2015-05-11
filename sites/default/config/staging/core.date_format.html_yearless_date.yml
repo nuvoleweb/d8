@@ -1,0 +1,8 @@
+uuid: 7f00ecb0-abd7-48bc-ad00-ade094d6d957
+langcode: en
+status: true
+dependencies: {  }
+id: html_yearless_date
+label: 'HTML Yearless date'
+locked: true
+pattern: m-d
